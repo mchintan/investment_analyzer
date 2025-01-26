@@ -192,6 +192,33 @@ def plot_simulations(results, portfolio_returns, withdrawals, asset_returns, ass
     
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     
+def run_convergence_analysis(initial_investment, years, initial_withdrawal, inflation_rate, asset_classes):
+    """Run multiple simulations with increasing sample sizes to show convergence"""
+    sample_sizes = [1000, 3000, 5000, 7000, 10000]
+    convergence_results = []
+    
+    # Run simulations for each sample size
+    for n_sims in sample_sizes:
+        results, portfolio_returns, withdrawals, _, _ = run_simulation(
+            initial_investment=initial_investment,
+            years=years,
+            num_simulations=n_sims,
+            initial_withdrawal=initial_withdrawal,
+            inflation_rate=inflation_rate,
+            asset_classes=asset_classes
+        )
+        
+        final_values = results[:, -1]
+        convergence_results.append({
+            'n_sims': n_sims,
+            'median': np.median(final_values),
+            'percentile_10': np.percentile(final_values, 10),
+            'percentile_90': np.percentile(final_values, 90),
+            'risk_of_depletion': np.mean(final_values < withdrawals[-1]) * 100
+        })
+    
+    return convergence_results
+
 # Modify the main block to only run if directly executed
 if __name__ == "__main__":
     # Set random seed for reproducibility
