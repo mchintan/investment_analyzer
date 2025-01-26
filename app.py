@@ -8,14 +8,14 @@ import pandas as pd
 def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns, asset_classes, initial_investment):
     # Create figure with secondary y-axis
     fig = make_subplots(
-        rows=4, cols=1,  # Change to single column layout for mobile
+        rows=4, cols=1,
         subplot_titles=(
             'Portfolio Value Over Time',
-            'Asset Class Returns',
-            'Portfolio Returns',
-            'Annual Withdrawals'
+            'Asset Class Returns Distribution',
+            'Portfolio Return Distribution',
+            'Annual Withdrawals Over Time'
         ),
-        vertical_spacing=0.08,
+        vertical_spacing=0.12,
         row_heights=[0.4, 0.2, 0.2, 0.2]
     )
 
@@ -71,7 +71,7 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
         row=1, col=1
     )
 
-    # Withdrawal progression (top right)
+    # Withdrawal progression
     fig.add_trace(
         go.Scatter(
             x=years[1:],
@@ -80,10 +80,10 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
             line=dict(color='red', width=2),
             hovertemplate='Year: %{x}<br>Withdrawal: $%{y:,.0f}<extra></extra>'
         ),
-        row=1, col=1
+        row=4, col=1
     )
 
-    # Asset class return distributions (middle left)
+    # Asset class return distributions
     colors = ['red', 'green', 'blue', 'orange', 'purple']
     for i, asset in enumerate(asset_classes):
         fig.add_trace(
@@ -149,28 +149,56 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
     fig.add_hline(y=80, line=dict(color="red", width=1, dash="dash"),
                   row=3, col=1)
 
-    # Update layout for better mobile viewing
+    # Update layout for better mobile viewing and legend readability
     fig.update_layout(
-        height=1000,  # Adjusted for mobile scrolling
+        height=1200,  # Increased height
         showlegend=True,
         title_text="Portfolio Monte Carlo Simulation",
         template="plotly_white",
         hovermode='x unified',
         legend=dict(
-            orientation="h",  # Horizontal legend
+            orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="center",
-            x=0.5
+            x=0.5,
+            font=dict(size=12),
+            groupclick="toggleitem",
+            itemsizing="constant",
+            tracegroupgap=5  # Add gap between legend groups
         ),
-        margin=dict(l=20, r=20, t=100, b=20)  # Tighter margins
+        margin=dict(l=20, r=20, t=120, b=20),  # Increased top margin for legend
+        font=dict(size=14)
     )
 
-    # Make fonts more readable on mobile
-    fig.update_layout(
-        font=dict(size=14),
-        title_font=dict(size=16)
-    )
+    # Update subplot titles font size and position
+    for i, annotation in enumerate(fig.layout.annotations):
+        annotation.update(
+            font=dict(size=16),
+            y=annotation.y + 0.02  # Move titles up slightly
+        )
+
+    # Group legends by subplot with proper naming
+    for trace in fig.data:
+        # Skip if trace name is None
+        if trace.name is None:
+            continue
+            
+        # Handle different types of traces
+        if 'Cumulative' in trace.name:
+            trace.showlegend = False
+        elif trace.name in ['Median', '10th Percentile', '90th Percentile']:
+            trace.legendgroup = "portfolio_value"
+            trace.legendgrouptitle = dict(text="Portfolio Value")
+        elif 'Annual Withdrawal' in trace.name:
+            trace.legendgroup = "withdrawals"
+            trace.legendgrouptitle = dict(text="Withdrawals")
+        elif 'Portfolio Returns' in trace.name:
+            trace.legendgroup = "portfolio_returns"
+            trace.legendgrouptitle = dict(text="Portfolio Returns")
+        elif any(asset.name in trace.name for asset in asset_classes):
+            trace.legendgroup = "assets"
+            trace.legendgrouptitle = dict(text="Asset Classes")
 
     return fig
 
@@ -271,7 +299,7 @@ def plot_convergence(convergence_results):
         secondary_y=True
     )
     
-    # Update layout for mobile
+    # Update layout for better legend readability
     fig.update_layout(
         height=500,
         title_text="Convergence Analysis",
@@ -282,16 +310,35 @@ def plot_convergence(convergence_results):
             yanchor="bottom",
             y=1.02,
             xanchor="center",
-            x=0.5
+            x=0.5,
+            font=dict(size=12),
+            itemsizing="constant"
         ),
         margin=dict(l=20, r=20, t=100, b=20),
         font=dict(size=14)
     )
-    
-    # Update axes
-    fig.update_xaxes(title_text="Number of Simulations", tickformat=",")
-    fig.update_yaxes(title_text="Portfolio Value ($)", tickformat="$,.0f", secondary_y=False)
-    fig.update_yaxes(title_text="Risk of Depletion (%)", tickformat=".1f", secondary_y=True)
+
+    # Group convergence metrics in legend
+    for trace in fig.data:
+        if trace.name in ['Median', '90th Percentile', '10th Percentile']:
+            trace.legendgroup = "portfolio"
+            trace.legendgrouptitle = dict(text="Portfolio Values")
+        elif trace.name == 'Risk of Depletion':
+            trace.legendgroup = "risk"
+            trace.legendgrouptitle = dict(text="Risk Metrics")
+
+    # Update axes with larger font
+    fig.update_xaxes(title_text="Number of Simulations", 
+                    tickformat=",", 
+                    title_font=dict(size=14))
+    fig.update_yaxes(title_text="Portfolio Value ($)", 
+                    tickformat="$,.0f", 
+                    secondary_y=False,
+                    title_font=dict(size=14))
+    fig.update_yaxes(title_text="Risk of Depletion (%)", 
+                    tickformat=".1f", 
+                    secondary_y=True,
+                    title_font=dict(size=14))
     
     return fig, median_changes, p90_changes, p10_changes, risk_changes
 
@@ -548,26 +595,45 @@ def main():
         with summary_placeholder.container():
             st.header("Simulation Summary")
             
-            # Use full width for mobile
-            st.metric(
-                "Median Portfolio Value",
-                f"${np.median(final_values):,.0f}",
-                f"Initial: ${initial_investment:,.0f}"
-            )
-            st.metric(
-                "Risk of Depletion",
-                f"{risk_of_depletion:.1f}%"
-            )
-            st.metric(
-                "Median Year of Depletion",
-                depletion_text,
-                f"{len(years_of_depletion) / len(results) * 100:.1f}% of simulations"
-            )
-            st.metric(
-                "Median Year of Escape ($10MM)",
-                escape_text,
-                escape_delta
-            )
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.subheader("Base Metrics")
+                st.metric(
+                    "Median Portfolio Value",
+                    f"${np.median(final_values):,.0f}",
+                    f"Initial: ${initial_investment:,.0f}"
+                )
+                st.metric(
+                    "Risk of Depletion",
+                    f"{risk_of_depletion:.1f}%"
+                )
+            
+            with col2:
+                st.subheader("Extreme Scenarios")
+                st.metric(
+                    "5th Percentile",
+                    f"${np.percentile(final_values, 5):,.0f}",
+                    f"{((np.percentile(final_values, 5) / initial_investment) ** (1/years) - 1) * 100:.1f}% CAGR"
+                )
+                st.metric(
+                    "95th Percentile",
+                    f"${np.percentile(final_values, 95):,.0f}",
+                    f"{((np.percentile(final_values, 95) / initial_investment) ** (1/years) - 1) * 100:.1f}% CAGR"
+                )
+            
+            with col3:
+                st.subheader("Key Events")
+                st.metric(
+                    "Median Year of Depletion",
+                    depletion_text,
+                    f"{len(years_of_depletion) / len(results) * 100:.1f}% of simulations"
+                )
+                st.metric(
+                    "Median Year of Escape ($10MM)",
+                    escape_text,
+                    escape_delta
+                )
             
             # Asset allocation table with horizontal scroll
             st.subheader("Asset Allocation")
