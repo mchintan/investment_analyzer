@@ -21,6 +21,9 @@ wheels/
 .installed.cfg
 *.egg
 
+# AI Development
+ai_harness.py
+
 # Virtual Environment
 venv/
 ENV/
