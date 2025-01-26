@@ -28,10 +28,10 @@ def run_simulation(initial_investment=5000000, years=30, num_simulations=5000,
     # Use default asset classes if none provided
     if asset_classes is None:
         asset_classes = [
-            AssetClass("Stocks", 0.10, 0.16, -0.25, 0.35, 0.50),          # 40% stocks (higher volatility)
-            AssetClass("Bonds/MMF", 0.04, 0.04, -0.01, 0.10, 0.15),       # 25% bonds/money market
-            AssetClass("Alternatives", 0.11, 0.12, -0.15, 0.30, 0.25),    # 15% alternatives (hedge funds, commodities)
-            AssetClass("Private Placements", 0.20, 0.20, -0.30, 0.40, 0.15), # 15% private placements (highest risk/return)
+            AssetClass("Stocks", 0.10, 0.16, -0.25, 0.25, 0.30),          # 30% stocks (higher volatility)
+            AssetClass("Bonds/MMF", 0.04, 0.04, -0.01, 0.05, 0.20),       # 20% bonds/money market
+            AssetClass("Alternatives", 0.11, 0.12, -0.15, 0.30, 0.25),    # 25% alternatives (hedge funds, commodities)
+            AssetClass("Private Placements", 0.14, 0.20, -0.30, 0.30, 0.20), # 20% private placements (highest risk/return)
             AssetClass("Cash", 0.02, 0.01, 0.01, 0.04, 0.05)              # 5% cash
         ]
     

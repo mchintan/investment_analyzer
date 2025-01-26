@@ -4,6 +4,15 @@ from monte_carlo_portfolio import run_simulation, AssetClass
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+import io
+import base64
+from reportlab.lib.utils import ImageReader
+import plotly.io as pio
 
 def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns, asset_classes, initial_investment):
     # Create figure with secondary y-axis
@@ -117,20 +126,36 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
         )
 
     # Portfolio return distribution (bottom left)
+    returns_hist, returns_bins = np.histogram(portfolio_returns.flatten(), bins=50)
+    most_common_idx = np.argmax(returns_hist)
+    most_common_range = f"{returns_bins[most_common_idx]:.1%} to {returns_bins[most_common_idx + 1]:.1%}"
+    most_common_frequency = returns_hist[most_common_idx] / len(portfolio_returns.flatten()) * 100
+    
     fig.add_trace(
         go.Histogram(
-            x=portfolio_returns.flatten(),
+            x=portfolio_returns.flatten() * 100,  # Convert to percentage
             name='Portfolio Returns',
             nbinsx=50,
             marker_color='blue',
             opacity=0.7,
-            hovertemplate='Return: %{x:.1%}<br>Count: %{y}<extra></extra>'
+            hovertemplate='Return: %{x:.1f}%<br>Count: %{y}<extra></extra>'
         ),
         row=3, col=1
     )
 
+    # Add annotation for most common range
+    fig.add_annotation(
+        text=f"Most Common: {most_common_range}<br>({most_common_frequency:.1f}% of returns)",
+        xref="x3", yref="paper",
+        x=returns_bins[most_common_idx] * 100,
+        y=1,
+        showarrow=True,
+        arrowhead=1,
+        row=3, col=1
+    )
+
     # Portfolio returns Pareto (bottom right)
-    counts, bins = np.histogram(portfolio_returns.flatten(), bins=50)
+    counts, bins = np.histogram(portfolio_returns.flatten() * 100, bins=50)  # Convert to percentage
     cumsum = np.cumsum(counts)
     cumsum_norm = cumsum / cumsum[-1] * 100
     
@@ -140,11 +165,18 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
             y=cumsum_norm,
             name='Portfolio Cumulative',
             line=dict(color='blue'),
-            hovertemplate='Return: %{x:.1%}<br>Cumulative: %{y:.1f}%<extra></extra>'
+            hovertemplate='Return: %{x:.1f}%<br>Cumulative: %{y:.1f}%<extra></extra>'
         ),
         row=3, col=1
     )
-    
+
+    # Update axis labels to show percentages
+    fig.update_xaxes(
+        title_text="Return Rate (%)", 
+        tickformat=".1f",  # Show as percentage with 1 decimal
+        row=3, col=1
+    )
+
     # Add 80% reference line for Pareto charts
     fig.add_hline(y=80, line=dict(color="red", width=1, dash="dash"),
                   row=3, col=1)
@@ -342,14 +374,162 @@ def plot_convergence(convergence_results):
     
     return fig, median_changes, p90_changes, p10_changes, risk_changes
 
+def generate_pdf_report(results, portfolio_returns, withdrawals, asset_returns, asset_classes, initial_investment, years, convergence_results):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=30)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Title
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        spaceAfter=30
+    )
+    story.append(Paragraph("Portfolio Simulation Report", title_style))
+    story.append(Spacer(1, 12))
+    
+    # Key Metrics
+    story.append(Paragraph("Key Metrics", styles['Heading2']))
+    final_values = results[:, -1]
+    risk_of_depletion = np.mean(final_values < withdrawals[-1]) * 100
+    
+    metrics_data = [
+        ["Initial Investment", f"${initial_investment:,.0f}"],
+        ["Median Final Value", f"${np.median(final_values):,.0f}"],
+        ["Risk of Depletion", f"{risk_of_depletion:.1f}%"],
+        ["Median Annual Return", f"{np.median(portfolio_returns.flatten()) * 100:.1f}%"],
+        ["Time Horizon", f"{years} years"]
+    ]
+    
+    t = Table(metrics_data, colWidths=[2*inch, 2*inch])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 12),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 20))
+    
+    # Asset Allocation
+    story.append(Paragraph("Asset Allocation", styles['Heading2']))
+    allocation_data = [["Asset Class", "Allocation", "Expected Return", "Std Dev"]]
+    for asset in asset_classes:
+        allocation_data.append([
+            asset.name,
+            f"{asset.allocation:.1%}",
+            f"{asset.mean_return:.1%}",
+            f"{asset.std_dev:.1%}"
+        ])
+    
+    t = Table(allocation_data, colWidths=[2*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 20))
+    
+    # Convergence Analysis
+    story.append(Paragraph("Convergence Analysis", styles['Heading2']))
+    convergence_data = [["Simulations", "Median Change", "90th %ile Change", "10th %ile Change"]]
+    for i in range(len(convergence_results) - 1):
+        convergence_data.append([
+            f"{convergence_results[i]['n_sims']:,} → {convergence_results[i+1]['n_sims']:,}",
+            f"{abs((convergence_results[i+1]['median'] - convergence_results[i]['median']) / convergence_results[i]['median'] * 100):.2f}%",
+            f"{abs((convergence_results[i+1]['percentile_90'] - convergence_results[i]['percentile_90']) / convergence_results[i]['percentile_90'] * 100):.2f}%",
+            f"{abs((convergence_results[i+1]['percentile_10'] - convergence_results[i]['percentile_10']) / convergence_results[i]['percentile_10'] * 100):.2f}%"
+        ])
+    
+    t = Table(convergence_data, colWidths=[2*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(t)
+    
+    # Add graphs section
+    story.append(Spacer(1, 30))
+    story.append(Paragraph("Portfolio Analysis Graphs", styles['Heading2']))
+    
+    try:
+        # Create main simulation figure
+        main_fig = create_plotly_figures(
+            results, portfolio_returns, withdrawals, 
+            asset_returns, asset_classes, initial_investment
+        )
+        
+        # Create convergence figure
+        conv_fig, _, _, _, _ = plot_convergence(convergence_results)
+        
+        # Save figures as images
+        for fig, title in [(main_fig, "Portfolio Simulation Results"), 
+                          (conv_fig, "Convergence Analysis")]:
+            # Add title for each graph
+            story.append(Spacer(1, 20))
+            story.append(Paragraph(title, styles['Heading3']))
+            story.append(Spacer(1, 10))
+            
+            # Convert Plotly figure to image with white background
+            img_bytes = pio.to_image(
+                fig, 
+                format="png", 
+                width=700, 
+                height=500,
+                scale=2.0,  # Higher resolution
+                engine='kaleido'
+            )
+            img_buffer = io.BytesIO(img_bytes)
+            
+            # Add image to PDF
+            img = ImageReader(img_buffer)
+            story.append(Table(
+                [[img]], 
+                colWidths=[7*inch],
+                style=[('ALIGN', (0,0), (-1,-1), 'CENTER')]
+            ))
+            story.append(Spacer(1, 20))
+    
+    except Exception as e:
+        # If there's an error with the graphs, add an error message
+        story.append(Paragraph(f"Error generating graphs: {str(e)}", styles['Normal']))
+    
+    # Build PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
 def main():
     st.set_page_config(
         page_title="Portfolio Monte Carlo Simulation", 
         layout="wide",
-        initial_sidebar_state="collapsed"  # Start with collapsed sidebar on mobile
+        initial_sidebar_state="collapsed"
     )
     
-    st.title("Portfolio Monte Carlo Simulation")
+    # Create header row with just the title
+    header_col1, header_col2, header_col3 = st.columns([2, 4, 2])
+    
+    with header_col2:
+        st.title("Portfolio Monte Carlo Simulation")
     
     # Create a placeholder for the summary at the top
     summary_placeholder = st.empty()
@@ -381,13 +561,13 @@ def main():
     
     # Initialize allocation variables in session state if they don't exist
     if 'stocks_allocation' not in st.session_state:
-        st.session_state.stocks_allocation = 50
+        st.session_state.stocks_allocation = 30
     if 'bonds_allocation' not in st.session_state:
-        st.session_state.bonds_allocation = 15
+        st.session_state.bonds_allocation = 20
     if 'alts_allocation' not in st.session_state:
-        st.session_state.alts_allocation = 15
+        st.session_state.alts_allocation = 25
     if 'private_allocation' not in st.session_state:
-        st.session_state.private_allocation = 15
+        st.session_state.private_allocation = 20
     if 'cash_allocation' not in st.session_state:
         st.session_state.cash_allocation = 5
     
@@ -406,7 +586,7 @@ def main():
         stocks_return = st.number_input("Expected Return (%)", -10, 30, 10, step=1, key="stocks_return")
         stocks_std = st.number_input("Standard Deviation (%)", 0, 30, 16, step=1, key="stocks_std")
         stocks_min = st.number_input("Minimum Return (%)", -50, 0, -25, step=1, key="stocks_min")
-        stocks_max = st.number_input("Maximum Return (%)", 0, 50, 35, step=1, key="stocks_max")
+        stocks_max = st.number_input("Maximum Return (%)", 0, 50, 25, step=1, key="stocks_max")
     
     with st.sidebar.expander(f"Bonds/MMF ({st.session_state.bonds_allocation}%)"):
         bonds_allocation = st.number_input(
@@ -534,6 +714,15 @@ def main():
                 asset_classes=asset_classes
             )
             
+            # Run convergence analysis
+            convergence_results = run_convergence_analysis(
+                initial_investment=initial_investment,
+                years=years,
+                initial_withdrawal=initial_withdrawal,
+                inflation_rate=inflation_rate,
+                asset_classes=asset_classes
+            )
+            
             # Store results in session state
             st.session_state.simulation_results = {
                 'results': results,
@@ -541,7 +730,8 @@ def main():
                 'withdrawals': withdrawals,
                 'asset_returns': asset_returns,
                 'asset_classes': asset_classes,
-                'initial_investment': initial_investment
+                'initial_investment': initial_investment,
+                'convergence_results': convergence_results  # Add convergence results to session state
             }
     
     # If we have simulation results, display them
@@ -608,6 +798,10 @@ def main():
                     "Risk of Depletion",
                     f"{risk_of_depletion:.1f}%"
                 )
+                st.metric(
+                    "Median Annual Return",
+                    f"{np.median(portfolio_returns.flatten()) * 100:.1f}%"
+                )
             
             with col2:
                 st.subheader("Extreme Scenarios")
@@ -668,24 +862,16 @@ def main():
         st.markdown("---")
         
         # Run and display convergence analysis at the bottom
-        convergence_results = run_convergence_analysis(
-            initial_investment=initial_investment,
-            years=years,
-            initial_withdrawal=initial_withdrawal,
-            inflation_rate=inflation_rate,
-            asset_classes=asset_classes
-        )
-        
+        conv_fig, median_changes, p90_changes, p10_changes, risk_changes = plot_convergence(sim_data['convergence_results'])
         st.header("Convergence Analysis")
         
         # Display convergence plot
-        conv_fig, median_changes, p90_changes, p10_changes, risk_changes = plot_convergence(convergence_results)
         st.plotly_chart(conv_fig, use_container_width=True)
         
         # Display changes table
         st.markdown("### Simulation Convergence")
         changes_df = pd.DataFrame({
-            'Simulations': [f"{convergence_results[i]['n_sims']:,} → {convergence_results[i+1]['n_sims']:,}" 
+            'Simulations': [f"{sim_data['convergence_results'][i]['n_sims']:,} → {sim_data['convergence_results'][i+1]['n_sims']:,}" 
                          for i in range(len(median_changes))],
             'Median Change': [f"{change:.2f}%" for change in median_changes],
             '90th Percentile': [f"{change:.2f}%" for change in p90_changes],
