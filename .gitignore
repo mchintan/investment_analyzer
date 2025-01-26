@@ -34,6 +34,11 @@ ENV/
 # Streamlit
 .streamlit/
 
+# Environment Variables
+.env
+.env.local
+.env.*
+
 # OS
 .DS_Store
 .DS_Store?
