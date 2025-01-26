@@ -1,9 +1,9 @@
 import streamlit as st
 import numpy as np
-from monte_carlo_portfolio import run_simulation, AssetClass
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
+from monte_carlo_portfolio import run_simulation, AssetClass, run_convergence_analysis
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
