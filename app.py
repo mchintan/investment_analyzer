@@ -203,8 +203,8 @@ def run_convergence_analysis(initial_investment, years, initial_withdrawal, infl
 
 def plot_convergence(convergence_results):
     """Create a single convergence analysis plot with all metrics"""
-    # Create figure
-    fig = go.Figure()
+    # Create figure with secondary y-axis
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
     
     # Extract data
     n_sims = [r['n_sims'] for r in convergence_results]
@@ -225,15 +225,16 @@ def plot_convergence(convergence_results):
     p10_changes = calc_relative_change(p10)
     risk_changes = calc_relative_change(risk)
     
-    # Add traces
+    # Add traces for portfolio values
     fig.add_trace(
         go.Scatter(
             x=n_sims,
             y=medians,
             name='Median',
             line=dict(color='red'),
-            hovertemplate='Sims: %{x}<br>Value: $%{y:,.0f}<extra></extra>'
-        )
+            hovertemplate='Sims: %{x:,}<br>Value: $%{y:,.0f}<extra></extra>'
+        ),
+        secondary_y=False
     )
     
     fig.add_trace(
@@ -242,8 +243,9 @@ def plot_convergence(convergence_results):
             y=p90,
             name='90th Percentile',
             line=dict(color='blue'),
-            hovertemplate='Sims: %{x}<br>Value: $%{y:,.0f}<extra></extra>'
-        )
+            hovertemplate='Sims: %{x:,}<br>Value: $%{y:,.0f}<extra></extra>'
+        ),
+        secondary_y=False
     )
     
     fig.add_trace(
@@ -252,8 +254,9 @@ def plot_convergence(convergence_results):
             y=p10,
             name='10th Percentile',
             line=dict(color='green'),
-            hovertemplate='Sims: %{x}<br>Value: $%{y:,.0f}<extra></extra>'
-        )
+            hovertemplate='Sims: %{x:,}<br>Value: $%{y:,.0f}<extra></extra>'
+        ),
+        secondary_y=False
     )
     
     # Add risk of depletion on secondary y-axis
@@ -263,9 +266,9 @@ def plot_convergence(convergence_results):
             y=risk,
             name='Risk of Depletion',
             line=dict(color='orange', dash='dash'),
-            yaxis='y2',
-            hovertemplate='Sims: %{x}<br>Risk: %{y:.1f}%<extra></extra>'
-        )
+            hovertemplate='Sims: %{x:,}<br>Risk: %{y:.1f}%<extra></extra>'
+        ),
+        secondary_y=True
     )
     
     # Update layout for mobile
@@ -284,6 +287,11 @@ def plot_convergence(convergence_results):
         margin=dict(l=20, r=20, t=100, b=20),
         font=dict(size=14)
     )
+    
+    # Update axes
+    fig.update_xaxes(title_text="Number of Simulations", tickformat=",")
+    fig.update_yaxes(title_text="Portfolio Value ($)", tickformat="$,.0f", secondary_y=False)
+    fig.update_yaxes(title_text="Risk of Depletion (%)", tickformat=".1f", secondary_y=True)
     
     return fig, median_changes, p90_changes, p10_changes, risk_changes
 
@@ -449,8 +457,11 @@ def main():
         step=0.1
     ) / 100
     
-    # Run simulation button
-    if st.sidebar.button("Run Simulation") and total_allocation == 100:
+    # Store the "Run Simulation" button state
+    run_clicked = st.sidebar.button("Run Simulation")
+    
+    # Run simulation if button is clicked OR if this is the first load (no previous runs)
+    if ('simulation_results' not in st.session_state) or (run_clicked and total_allocation == 100):
         with st.spinner("Running simulations and convergence analysis..."):
             # Create asset classes with user inputs
             asset_classes = [
@@ -466,7 +477,7 @@ def main():
                           cash_min/100, cash_max/100, cash_allocation/100)
             ]
             
-            # Run simulation first to get the results
+            # Run simulation and store results in session state
             results, portfolio_returns, withdrawals, asset_returns, _ = run_simulation(
                 initial_investment=initial_investment,
                 years=years,
@@ -476,138 +487,151 @@ def main():
                 asset_classes=asset_classes
             )
             
-            # Calculate statistics
-            final_values = results[:, -1]
-            risk_of_depletion = np.mean(final_values < withdrawals[-1]) * 100
+            # Store results in session state
+            st.session_state.simulation_results = {
+                'results': results,
+                'portfolio_returns': portfolio_returns,
+                'withdrawals': withdrawals,
+                'asset_returns': asset_returns,
+                'asset_classes': asset_classes,
+                'initial_investment': initial_investment
+            }
+    
+    # If we have simulation results, display them
+    if 'simulation_results' in st.session_state:
+        # Extract results from session state
+        sim_data = st.session_state.simulation_results
+        results = sim_data['results']
+        portfolio_returns = sim_data['portfolio_returns']
+        withdrawals = sim_data['withdrawals']
+        asset_returns = sim_data['asset_returns']
+        asset_classes = sim_data['asset_classes']
+        initial_investment = sim_data['initial_investment']
+        
+        # Calculate and display statistics
+        final_values = results[:, -1]
+        risk_of_depletion = np.mean(final_values < withdrawals[-1]) * 100
+        
+        # Calculate year of depletion (first year portfolio hits zero)
+        years_of_depletion = []
+        for sim in results:
+            depleted_years = np.where(sim <= 0)[0]
+            if len(depleted_years) > 0:
+                years_of_depletion.append(depleted_years[0])
+        
+        # Calculate median year of depletion if it occurs
+        if years_of_depletion:
+            median_year_of_depletion = int(np.median(years_of_depletion))
+            depletion_text = f"Year {median_year_of_depletion}"
+        else:
+            depletion_text = "Never"
+        
+        # Calculate year of escape (first year hitting $10MM)
+        escape_threshold = 10_000_000
+        years_of_escape = []
+        for sim in results:
+            escape_years = np.where(sim >= escape_threshold)[0]
+            if len(escape_years) > 0:
+                years_of_escape.append(escape_years[0])
+        
+        # Calculate median year of escape if it occurs
+        if years_of_escape:
+            median_year_of_escape = int(np.median(years_of_escape))
+            escape_text = f"Year {median_year_of_escape}"
+            escape_probability = (len(years_of_escape) / len(results)) * 100
+            escape_delta = f"{escape_probability:.1f}% probability"
+        else:
+            escape_text = "Never"
+            escape_delta = "0% probability"
+        
+        # Display summary at the top using the placeholder
+        with summary_placeholder.container():
+            st.header("Simulation Summary")
             
-            # Calculate year of depletion (first year portfolio hits zero)
-            years_of_depletion = []
-            for sim in results:
-                depleted_years = np.where(sim <= 0)[0]
-                if len(depleted_years) > 0:
-                    years_of_depletion.append(depleted_years[0])
-            
-            # Calculate median year of depletion if it occurs
-            if years_of_depletion:
-                median_year_of_depletion = int(np.median(years_of_depletion))
-                depletion_text = f"Year {median_year_of_depletion}"
-            else:
-                depletion_text = "Never"
-            
-            # Calculate year of escape (first year hitting $10MM)
-            escape_threshold = 10_000_000
-            years_of_escape = []
-            for sim in results:
-                escape_years = np.where(sim >= escape_threshold)[0]
-                if len(escape_years) > 0:
-                    years_of_escape.append(escape_years[0])
-            
-            # Calculate median year of escape if it occurs
-            if years_of_escape:
-                median_year_of_escape = int(np.median(years_of_escape))
-                escape_text = f"Year {median_year_of_escape}"
-                escape_probability = (len(years_of_escape) / len(results)) * 100
-                escape_delta = f"{escape_probability:.1f}% probability"
-            else:
-                escape_text = "Never"
-                escape_delta = "0% probability"
-            
-            # Display summary at the top using the placeholder
-            with summary_placeholder.container():
-                st.header("Simulation Summary")
-                
-                # Use full width for mobile
-                st.metric(
-                    "Median Portfolio Value",
-                    f"${np.median(final_values):,.0f}",
-                    f"Initial: ${initial_investment:,.0f}"
-                )
-                st.metric(
-                    "Risk of Depletion",
-                    f"{risk_of_depletion:.1f}%"
-                )
-                st.metric(
-                    "Median Year of Depletion",
-                    depletion_text,
-                    f"{len(years_of_depletion) / len(results) * 100:.1f}% of simulations"
-                )
-                st.metric(
-                    "Median Year of Escape ($10MM)",
-                    escape_text,
-                    escape_delta
-                )
-                
-                # Asset allocation table with horizontal scroll
-                st.subheader("Asset Allocation")
-                allocation_data = {
-                    "Asset": [asset.name for asset in asset_classes],
-                    "Alloc": [f"{asset.allocation:.1%}" for asset in asset_classes],
-                    "Return": [f"{asset.mean_return:.1%}" for asset in asset_classes],
-                    "StdDev": [f"{asset.std_dev:.1%}" for asset in asset_classes],
-                    "Min": [f"{asset.min_return:.1%}" for asset in asset_classes],
-                    "Max": [f"{asset.max_return:.1%}" for asset in asset_classes]
-                }
-                st.dataframe(
-                    allocation_data, 
-                    hide_index=True,
-                    use_container_width=True
-                )
-                
-                st.divider()
-            
-            # Create and display main plot
-            fig = create_plotly_figures(
-                results,
-                portfolio_returns,
-                withdrawals,
-                asset_returns,
-                asset_classes,
-                initial_investment
+            # Use full width for mobile
+            st.metric(
+                "Median Portfolio Value",
+                f"${np.median(final_values):,.0f}",
+                f"Initial: ${initial_investment:,.0f}"
             )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Add space between main simulation and convergence analysis
-            st.markdown("---")
-            
-            # Run and display convergence analysis at the bottom
-            convergence_results = run_convergence_analysis(
-                initial_investment=initial_investment,
-                years=years,
-                initial_withdrawal=initial_withdrawal,
-                inflation_rate=inflation_rate,
-                asset_classes=asset_classes
+            st.metric(
+                "Risk of Depletion",
+                f"{risk_of_depletion:.1f}%"
+            )
+            st.metric(
+                "Median Year of Depletion",
+                depletion_text,
+                f"{len(years_of_depletion) / len(results) * 100:.1f}% of simulations"
+            )
+            st.metric(
+                "Median Year of Escape ($10MM)",
+                escape_text,
+                escape_delta
             )
             
-            st.header("Convergence Analysis")
+            # Asset allocation table with horizontal scroll
+            st.subheader("Asset Allocation")
+            allocation_data = {
+                "Asset": [asset.name for asset in asset_classes],
+                "Alloc": [f"{asset.allocation:.1%}" for asset in asset_classes],
+                "Return": [f"{asset.mean_return:.1%}" for asset in asset_classes],
+                "StdDev": [f"{asset.std_dev:.1%}" for asset in asset_classes],
+                "Min": [f"{asset.min_return:.1%}" for asset in asset_classes],
+                "Max": [f"{asset.max_return:.1%}" for asset in asset_classes]
+            }
+            st.dataframe(
+                allocation_data, 
+                hide_index=True,
+                use_container_width=True
+            )
             
-            conv_col1, conv_col2 = st.columns([2, 1])
-            
-            with conv_col1:
-                conv_fig, median_changes, p90_changes, p10_changes, risk_changes = plot_convergence(convergence_results)
-                st.plotly_chart(conv_fig, use_container_width=True)
-            
-            with conv_col2:
-                st.markdown("### Relative Changes")
-                changes_df = pd.DataFrame({
-                    'Iteration': [f"{convergence_results[i]['n_sims']:,} → {convergence_results[i+1]['n_sims']:,}" 
-                                 for i in range(len(median_changes))],
-                    'Median': [f"{change:.2f}%" for change in median_changes],
-                    '90th': [f"{change:.2f}%" for change in p90_changes],
-                    '10th': [f"{change:.2f}%" for change in p10_changes],
-                    'Risk': [f"{change:.2f}%" for change in risk_changes]
-                })
-                
-                st.dataframe(
-                    changes_df,
-                    hide_index=True,
-                    column_config={
-                        "Iteration": "Simulations",
-                        "Median": "Median Value",
-                        "90th": "90th Percentile",
-                        "10th": "10th Percentile",
-                        "Risk": "Risk of Depletion"
-                    }
-                )
+            st.divider()
+        
+        # Create and display main plot
+        fig = create_plotly_figures(
+            results,
+            portfolio_returns,
+            withdrawals,
+            asset_returns,
+            asset_classes,
+            initial_investment
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Add space between main simulation and convergence analysis
+        st.markdown("---")
+        
+        # Run and display convergence analysis at the bottom
+        convergence_results = run_convergence_analysis(
+            initial_investment=initial_investment,
+            years=years,
+            initial_withdrawal=initial_withdrawal,
+            inflation_rate=inflation_rate,
+            asset_classes=asset_classes
+        )
+        
+        st.header("Convergence Analysis")
+        
+        # Display convergence plot
+        conv_fig, median_changes, p90_changes, p10_changes, risk_changes = plot_convergence(convergence_results)
+        st.plotly_chart(conv_fig, use_container_width=True)
+        
+        # Display changes table
+        st.markdown("### Simulation Convergence")
+        changes_df = pd.DataFrame({
+            'Simulations': [f"{convergence_results[i]['n_sims']:,} → {convergence_results[i+1]['n_sims']:,}" 
+                         for i in range(len(median_changes))],
+            'Median Change': [f"{change:.2f}%" for change in median_changes],
+            '90th Percentile': [f"{change:.2f}%" for change in p90_changes],
+            '10th Percentile': [f"{change:.2f}%" for change in p10_changes],
+            'Risk Change': [f"{change:.2f}%" for change in risk_changes]
+        })
+        
+        st.dataframe(
+            changes_df,
+            hide_index=True,
+            use_container_width=True
+        )
 
 if __name__ == "__main__":
     main() 
