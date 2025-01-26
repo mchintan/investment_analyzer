@@ -8,17 +8,15 @@ import pandas as pd
 def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns, asset_classes, initial_investment):
     # Create figure with secondary y-axis
     fig = make_subplots(
-        rows=2, cols=2,  # Changed to 2x2 layout for main graphs
+        rows=4, cols=1,  # Change to single column layout for mobile
         subplot_titles=(
-            'Portfolio Value Over Time',  # This will span both columns
-            None,  # Empty title for the second column
+            'Portfolio Value Over Time',
             'Asset Class Returns',
-            'Portfolio Returns'
+            'Portfolio Returns',
+            'Annual Withdrawals'
         ),
-        vertical_spacing=0.14,
-        horizontal_spacing=0.1,
-        row_heights=[0.7, 0.3],  # Make top row much larger
-        column_widths=[0.7, 0.3]  # Make first column wider
+        vertical_spacing=0.08,
+        row_heights=[0.4, 0.2, 0.2, 0.2]
     )
 
     years = np.arange(results.shape[1])
@@ -82,7 +80,7 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
             line=dict(color='red', width=2),
             hovertemplate='Year: %{x}<br>Withdrawal: $%{y:,.0f}<extra></extra>'
         ),
-        row=1, col=2
+        row=1, col=1
     )
 
     # Asset class return distributions (middle left)
@@ -115,7 +113,7 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
                 line=dict(color=colors[i % len(colors)]),
                 hovertemplate='Return: %{x:.1%}<br>Cumulative: %{y:.1f}%<extra></extra>'
             ),
-            row=2, col=2
+            row=2, col=1
         )
 
     # Portfolio return distribution (bottom left)
@@ -128,7 +126,7 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
             opacity=0.7,
             hovertemplate='Return: %{x:.1%}<br>Count: %{y}<extra></extra>'
         ),
-        row=2, col=2
+        row=3, col=1
     )
 
     # Portfolio returns Pareto (bottom right)
@@ -144,30 +142,35 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
             line=dict(color='blue'),
             hovertemplate='Return: %{x:.1%}<br>Cumulative: %{y:.1f}%<extra></extra>'
         ),
-        row=2, col=2
+        row=3, col=1
     )
     
     # Add 80% reference line for Pareto charts
     fig.add_hline(y=80, line=dict(color="red", width=1, dash="dash"),
-                  row=2, col=2)
+                  row=3, col=1)
 
-    # Update layout
+    # Update layout for better mobile viewing
     fig.update_layout(
-        height=1200,  # Adjusted height
+        height=1000,  # Adjusted for mobile scrolling
         showlegend=True,
         title_text="Portfolio Monte Carlo Simulation",
         template="plotly_white",
         hovermode='x unified',
         legend=dict(
-            yanchor="top",
-            y=0.98,
-            xanchor="right",
-            x=0.99
-        )
+            orientation="h",  # Horizontal legend
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5
+        ),
+        margin=dict(l=20, r=20, t=100, b=20)  # Tighter margins
     )
 
-    # Make the main plot span both columns
-    fig.layout.annotations[0].update(x=0.5)  # Center the title
+    # Make fonts more readable on mobile
+    fig.update_layout(
+        font=dict(size=14),
+        title_font=dict(size=16)
+    )
 
     return fig
 
@@ -265,9 +268,9 @@ def plot_convergence(convergence_results):
         )
     )
     
-    # Update layout
+    # Update layout for mobile
     fig.update_layout(
-        height=400,
+        height=500,
         title_text="Convergence Analysis",
         template="plotly_white",
         showlegend=True,
@@ -275,28 +278,21 @@ def plot_convergence(convergence_results):
             orientation="h",
             yanchor="bottom",
             y=1.02,
-            xanchor="right",
-            x=1
+            xanchor="center",
+            x=0.5
         ),
-        yaxis=dict(
-            title="Portfolio Value ($)",
-            tickformat="$,.0f",
-            side="left"
-        ),
-        yaxis2=dict(
-            title="Risk of Depletion (%)",
-            overlaying="y",
-            side="right"
-        ),
-        xaxis=dict(
-            title="Number of Simulations"
-        )
+        margin=dict(l=20, r=20, t=100, b=20),
+        font=dict(size=14)
     )
     
     return fig, median_changes, p90_changes, p10_changes, risk_changes
 
 def main():
-    st.set_page_config(page_title="Portfolio Monte Carlo Simulation", layout="wide")
+    st.set_page_config(
+        page_title="Portfolio Monte Carlo Simulation", 
+        layout="wide",
+        initial_sidebar_state="collapsed"  # Start with collapsed sidebar on mobile
+    )
     
     st.title("Portfolio Monte Carlo Simulation")
     
@@ -520,65 +516,42 @@ def main():
             with summary_placeholder.container():
                 st.header("Simulation Summary")
                 
-                # Create three columns for the summary
-                col1, col2, col3 = st.columns(3)
+                # Use full width for mobile
+                st.metric(
+                    "Median Portfolio Value",
+                    f"${np.median(final_values):,.0f}",
+                    f"Initial: ${initial_investment:,.0f}"
+                )
+                st.metric(
+                    "Risk of Depletion",
+                    f"{risk_of_depletion:.1f}%"
+                )
+                st.metric(
+                    "Median Year of Depletion",
+                    depletion_text,
+                    f"{len(years_of_depletion) / len(results) * 100:.1f}% of simulations"
+                )
+                st.metric(
+                    "Median Year of Escape ($10MM)",
+                    escape_text,
+                    escape_delta
+                )
                 
-                with col1:
-                    st.subheader("Portfolio Statistics")
-                    st.metric(
-                        "Median Portfolio Value",
-                        f"${np.median(final_values):,.0f}",
-                        f"Initial: ${initial_investment:,.0f}"
-                    )
-                    st.metric(
-                        "Risk of Depletion",
-                        f"{risk_of_depletion:.1f}%"
-                    )
-                    st.metric(
-                        "Median Year of Depletion",
-                        depletion_text,
-                        f"{len(years_of_depletion) / len(results) * 100:.1f}% of simulations"
-                    )
-                    st.metric(
-                        "Median Year of Escape ($10MM)",
-                        escape_text,
-                        escape_delta
-                    )
-                
-                with col2:
-                    st.subheader("Percentiles")
-                    st.metric(
-                        "90th Percentile",
-                        f"${np.percentile(final_values, 90):,.0f}"
-                    )
-                    st.metric(
-                        "10th Percentile",
-                        f"${np.percentile(final_values, 10):,.0f}"
-                    )
-                
-                with col3:
-                    st.subheader("Withdrawals")
-                    st.metric(
-                        "Initial Withdrawal",
-                        f"${initial_withdrawal:,.0f}"
-                    )
-                    st.metric(
-                        "Final Withdrawal",
-                        f"${withdrawals[-1]:,.0f}",
-                        f"Total: ${np.sum(withdrawals):,.0f}"
-                    )
-                
-                # Add asset allocation summary
+                # Asset allocation table with horizontal scroll
                 st.subheader("Asset Allocation")
                 allocation_data = {
-                    "Asset Class": [asset.name for asset in asset_classes],
-                    "Allocation": [f"{asset.allocation:.1%}" for asset in asset_classes],
-                    "Expected Return": [f"{asset.mean_return:.1%}" for asset in asset_classes],
-                    "Standard Deviation": [f"{asset.std_dev:.1%}" for asset in asset_classes],
-                    "Min Return": [f"{asset.min_return:.1%}" for asset in asset_classes],
-                    "Max Return": [f"{asset.max_return:.1%}" for asset in asset_classes]
+                    "Asset": [asset.name for asset in asset_classes],
+                    "Alloc": [f"{asset.allocation:.1%}" for asset in asset_classes],
+                    "Return": [f"{asset.mean_return:.1%}" for asset in asset_classes],
+                    "StdDev": [f"{asset.std_dev:.1%}" for asset in asset_classes],
+                    "Min": [f"{asset.min_return:.1%}" for asset in asset_classes],
+                    "Max": [f"{asset.max_return:.1%}" for asset in asset_classes]
                 }
-                st.dataframe(allocation_data, hide_index=True)
+                st.dataframe(
+                    allocation_data, 
+                    hide_index=True,
+                    use_container_width=True
+                )
                 
                 st.divider()
             
