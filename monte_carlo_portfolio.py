@@ -20,7 +20,7 @@ def get_truncated_normal(mean, sd, low, upp, size):
     b = (upp - mean) / sd
     return truncnorm.rvs(a, b, loc=mean, scale=sd, size=size)
 
-def run_simulation(initial_investment=5000000, years=30, num_simulations=5000, 
+def run_simulation(initial_investment=6000000, years=30, num_simulations=5000, 
                   initial_withdrawal=300000, inflation_rate=0.03, asset_classes=None):
     """
     Run Monte Carlo simulation for a diversified portfolio
@@ -226,7 +226,7 @@ if __name__ == "__main__":
     
     # Run simulation
     initial_withdrawal = 300000
-    initial_investment = 7000000
+    initial_investment = 6000000
     results, portfolio_returns, withdrawals, asset_returns, asset_classes = run_simulation(
         initial_withdrawal=initial_withdrawal,
         initial_investment=initial_investment

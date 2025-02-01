@@ -369,7 +369,21 @@ def main():
     st.set_page_config(
         page_title="Portfolio Monte Carlo Simulation", 
         layout="wide",
-        initial_sidebar_state="collapsed"
+        initial_sidebar_state="expanded"
+    )
+    
+    # Add custom CSS to hide sidebar on small screens
+    st.markdown(
+        """
+        <style>
+        @media (max-width: 768px) {
+            [data-testid="stSidebar"][aria-expanded="true"] {
+                display: none;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
     )
     
     # Create header row with just the title
@@ -389,7 +403,7 @@ def main():
         "Initial Investment ($)",
         min_value=100000,
         max_value=100000000,
-        value=7000000,
+        value=6000000,
         step=100000,
         format="%d"
     )
