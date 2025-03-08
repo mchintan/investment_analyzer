@@ -726,24 +726,34 @@ def load_profile_presets():
     }
     
     # Try to load from file if exists
-    file_path = "profile_presets.json"
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'r') as f:
-                return json.load(f)
-        except:
-            return default_presets
-    else:
-        return default_presets
+    # Check both the current directory and the persistent data directory
+    file_paths = ["profile_presets.json", "data/profile_presets.json"]
+    
+    for file_path in file_paths:
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r') as f:
+                    return json.load(f)
+            except:
+                continue
+    
+    return default_presets
 
 def save_profile_presets(presets):
     """Save profile presets to file"""
-    file_path = "profile_presets.json"
+    # Try to save to the persistent data directory first
+    if os.path.exists("data"):
+        file_path = "data/profile_presets.json"
+    else:
+        # Fall back to current directory
+        file_path = "profile_presets.json"
+        
     try:
         with open(file_path, 'w') as f:
             json.dump(presets, f, indent=2)
         return True
-    except:
+    except Exception as e:
+        print(f"Error saving profile presets: {e}")
         return False
 
 def save_current_profile(profile_name):

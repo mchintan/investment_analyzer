@@ -117,3 +117,39 @@ Cloud Run charges based on usage. To manage costs:
 - **Container startup issues:** Make sure the ENTRYPOINT command is correct
 
 For more help, refer to the [Google Cloud Run documentation](https://cloud.google.com/run/docs).
+## Docker Compose Deployment
+
+For easier local deployment, you can use Docker Compose:
+
+```bash
+# Start the application
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the application
+docker-compose down
+```
+
+## Google Cloud Run with Persistent Storage
+
+To maintain user profiles and settings across container restarts in Cloud Run:
+
+1. Create a Cloud Storage bucket:
+```bash
+gsutil mb -l us-central1 gs://investment-analyzer-data
+```
+
+2. Update your Cloud Run deployment to mount the bucket:
+```bash
+gcloud run deploy investment-analyzer \
+  --image gcr.io/$PROJECT_ID/investment-analyzer:latest \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --update-env-vars="DATA_BUCKET=gs://investment-analyzer-data"
+```
+
+3. Follow the Google Cloud documentation for optimizing persistent storage with Cloud Run:
+   https://cloud.google.com/run/docs/tutorials/network-filesystems-filestore
