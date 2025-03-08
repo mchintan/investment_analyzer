@@ -68,12 +68,6 @@ Adjust the simulation parameters using the sidebar controls:
    - Withdrawal strategy
    - Correlation between asset classes
 
-## Screenshots
-
-![Main Simulation View](./screenshots/main_simulation.png)
-![Advanced Analysis](./screenshots/advanced_analysis.png)
-![Historical Backtest](./screenshots/historical_backtest.png)
-
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
