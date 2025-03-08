@@ -975,15 +975,45 @@ def main():
         key="initial_investment"
     )
     
-    initial_withdrawal = st.sidebar.number_input(
-        "Initial Annual Withdrawal ($)",
-        min_value=10000,
-        max_value=1000000,
-        value=300000,
-        step=10000,
-        format="%d",
-        key="initial_withdrawal"
+    # Default initial withdrawal (will be updated based on withdrawal strategy)
+    initial_withdrawal = 300000
+    
+    # Withdrawal Strategy (moved earlier for better UI flow)
+    st.sidebar.header("Withdrawal Strategy")
+    withdrawal_strategy = st.sidebar.selectbox(
+        "Withdrawal Method",
+        options=["Fixed", "Percentage", "Dynamic"],
+        index=0,
+        format_func=lambda x: {
+            "Fixed": "Fixed (Inflation-Adjusted)",
+            "Percentage": "Percentage of Portfolio",
+            "Dynamic": "Dynamic (Market-Responsive)"
+        }.get(x, x)
     )
+    
+    st.session_state.withdrawal_strategy = withdrawal_strategy.lower()
+    
+    if withdrawal_strategy == "Fixed":
+        initial_withdrawal = st.sidebar.number_input(
+            "Initial Annual Withdrawal ($)",
+            min_value=10000,
+            max_value=1000000,
+            value=300000,
+            step=10000,
+            format="%d"
+        )
+        withdrawal_rate = initial_withdrawal / initial_investment * 100
+        st.session_state.withdrawal_rate = withdrawal_rate
+    else:
+        withdrawal_rate = st.sidebar.slider(
+            "Annual Withdrawal Rate (%)",
+            min_value=1.0,
+            max_value=10.0,
+            value=st.session_state.withdrawal_rate,
+            step=0.1
+        )
+        st.session_state.withdrawal_rate = withdrawal_rate
+        initial_withdrawal = initial_investment * (withdrawal_rate / 100)
     
     # Add stress test option
     st.sidebar.header("Stress Testing")
@@ -1124,43 +1154,6 @@ def main():
         value=3.0,
         step=0.1
     ) / 100
-    
-    # Withdrawal Strategy
-    st.sidebar.header("Withdrawal Strategy")
-    withdrawal_strategy = st.sidebar.selectbox(
-        "Withdrawal Method",
-        options=["Fixed", "Percentage", "Dynamic"],
-        index=0,
-        format_func=lambda x: {
-            "Fixed": "Fixed (Inflation-Adjusted)",
-            "Percentage": "Percentage of Portfolio",
-            "Dynamic": "Dynamic (Market-Responsive)"
-        }.get(x, x)
-    )
-    
-    st.session_state.withdrawal_strategy = withdrawal_strategy.lower()
-    
-    if withdrawal_strategy == "Fixed":
-        initial_withdrawal = st.sidebar.number_input(
-            "Initial Annual Withdrawal ($)",
-            min_value=10000,
-            max_value=1000000,
-            value=300000,
-            step=10000,
-            format="%d"
-        )
-        withdrawal_rate = initial_withdrawal / initial_investment * 100
-        st.session_state.withdrawal_rate = withdrawal_rate
-    else:
-        withdrawal_rate = st.sidebar.slider(
-            "Annual Withdrawal Rate (%)",
-            min_value=1.0,
-            max_value=10.0,
-            value=st.session_state.withdrawal_rate,
-            step=0.1
-        )
-        st.session_state.withdrawal_rate = withdrawal_rate
-        initial_withdrawal = initial_investment * (withdrawal_rate / 100)
     
     # Advanced settings in a separate expander
     with st.sidebar.expander("Advanced Settings"):
