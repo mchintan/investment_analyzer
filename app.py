@@ -1490,6 +1490,9 @@ def main():
                     # Calculate risk metrics directly from results
                     risk_metrics = analyzer.calculate_risk_metrics(results)
                     
+                    # Add correlation matrix to risk metrics for visualization
+                    risk_metrics['correlation_matrix'] = corr_matrix_np
+                    
                     # Store risk metrics in session state
                     st.session_state.simulation_results['risk_metrics'] = risk_metrics
                 except Exception as e:
