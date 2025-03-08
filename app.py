@@ -442,8 +442,10 @@ def plot_correlation_matrix(correlation_matrix, asset_classes):
         text=[[f"{correlation_matrix[i][j]:.2f}" for j in range(len(asset_names))] for i in range(len(asset_names))],
         hovertemplate='%{y} × %{x}: %{text}<extra></extra>',
         colorbar=dict(
-            title="Correlation",
-            titleside="right"
+            title=dict(
+                text="Correlation",
+                side="right"
+            )
         )
     ))
     
