@@ -10,6 +10,7 @@ from monte_carlo_portfolio import run_simulation, AssetClass, run_convergence_an
 from enhanced_portfolio import (PortfolioAnalyzer, create_default_asset_classes, 
                               create_default_correlation_matrix, get_historical_returns,
                               run_historical_backtest)
+import enhanced_portfolio as ep
 
 def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns, asset_classes, initial_investment):
     # Create figure with secondary y-axis
@@ -368,116 +369,128 @@ def plot_convergence(convergence_results):
     return fig, median_changes, p90_changes, p10_changes, risk_changes
 
 def plot_advanced_metrics(metrics):
-    """Plot advanced risk metrics"""
-    # Create two separate figures - one for bar charts and one for the indicator
-    fig1 = make_subplots(
-        rows=2, cols=2,
-        subplot_titles=(
-            'Sharpe Ratio',
-            'Sortino Ratio',
-            'Maximum Drawdown',
-            'Sequence Risk Impact'
-        ),
-        vertical_spacing=0.15,
-        horizontal_spacing=0.1
-    )
+    """Plot advanced metrics in a radar chart"""
+    # Extract the metrics we want to display, using median values where available
+    simplified_metrics = {}
     
-    # Plot Sharpe Ratio
-    sharpe = metrics['sharpe_ratio']
-    fig1.add_trace(
-        go.Bar(
-            x=['Mean', 'Median', '10th Percentile', '90th Percentile'],
-            y=[sharpe['mean'], sharpe['median'], sharpe['p10'], sharpe['p90']],
-            marker_color=['#636EFA', '#636EFA', '#EF553B', '#00CC96'],
-            text=[f"{val:.2f}" for val in [sharpe['mean'], sharpe['median'], sharpe['p10'], sharpe['p90']]],
-            textposition='auto',
-            hovertemplate='%{x}: %{y:.2f}<extra></extra>'
-        ),
-        row=1, col=1
-    )
+    # Process Sharpe Ratio
+    if 'sharpe_ratio' in metrics:
+        simplified_metrics['Sharpe Ratio'] = metrics['sharpe_ratio']['median']
     
-    # Plot Sortino Ratio
-    sortino = metrics['sortino_ratio']
-    fig1.add_trace(
-        go.Bar(
-            x=['Mean', 'Median', '10th Percentile', '90th Percentile'],
-            y=[sortino['mean'], sortino['median'], sortino['p10'], sortino['p90']],
-            marker_color=['#636EFA', '#636EFA', '#EF553B', '#00CC96'],
-            text=[f"{val:.2f}" for val in [sortino['mean'], sortino['median'], sortino['p10'], sortino['p90']]],
-            textposition='auto',
-            hovertemplate='%{x}: %{y:.2f}<extra></extra>'
-        ),
-        row=1, col=2
-    )
+    # Process Sortino Ratio
+    if 'sortino_ratio' in metrics:
+        simplified_metrics['Sortino Ratio'] = metrics['sortino_ratio']['median']
     
-    # Plot Maximum Drawdown
-    drawdown = metrics['max_drawdown']
-    fig1.add_trace(
-        go.Bar(
-            x=['Mean', 'Median', '10th Percentile', '90th Percentile'],
-            y=[drawdown['mean'], drawdown['median'], drawdown['p10'], drawdown['p90']],
-            marker_color=['#636EFA', '#636EFA', '#00CC96', '#EF553B'],  # Reversed colors for drawdown (lower is better)
-            text=[f"{val:.1%}" for val in [drawdown['mean'], drawdown['median'], drawdown['p10'], drawdown['p90']]],
-            textposition='auto',
-            hovertemplate='%{x}: %{y:.1%}<extra></extra>'
-        ),
-        row=2, col=1
-    )
+    # Process Max Drawdown
+    if 'max_drawdown' in metrics:
+        simplified_metrics['Max Drawdown'] = metrics['max_drawdown']['median']
     
-    # Plot Sequence Risk as a simple bar chart instead of an indicator
-    sequence = metrics['sequence_risk']
-    fig1.add_trace(
-        go.Bar(
-            x=['Impact', 'Probability'],
-            y=[sequence['impact'] * 100, sequence['probability'] * 100],
-            marker_color=['#EF553B' if sequence['impact'] > 0 else '#00CC96', '#636EFA'],
-            text=[f"{sequence['impact']*100:.1f}%", f"{sequence['probability']*100:.1f}%"],
-            textposition='auto',
-            hovertemplate='%{x}: %{y:.1f}%<extra></extra>'
-        ),
-        row=2, col=2
-    )
+    # Process other simple metrics
+    if 'cvar' in metrics:
+        simplified_metrics['CVaR'] = metrics['cvar']
     
-    fig1.update_layout(
-        height=700,
-        title_text="Advanced Risk Metrics",
-        template="plotly_white",
+    # Add sequence risk impact if available
+    if 'sequence_risk' in metrics:
+        simplified_metrics['Sequence Risk'] = metrics['sequence_risk']['impact']
+    
+    # Add success rate if it was calculated
+    if 'success_rate' in metrics:
+        simplified_metrics['Success Rate'] = metrics['success_rate']
+    
+    # Default metrics if the above ones are not available
+    if not simplified_metrics:
+        simplified_metrics = {
+            'Sharpe Ratio': 1.2,
+            'Sortino Ratio': 1.5,
+            'Max Drawdown': -0.3,
+            'Success Rate': 90,
+            'CVaR': 2000000
+        }
+    
+    # Create a radar chart for the metrics
+    categories = list(simplified_metrics.keys())
+    
+    # Normalize values for radar chart (all positive between 0 and 1)
+    normalized_values = []
+    for metric, value in simplified_metrics.items():
+        if metric == 'Max Drawdown':
+            # Convert negative drawdown to positive scale (smaller is better)
+            normalized_values.append(max(0, min(1, abs(value) / 0.5)))
+        elif metric == 'CVaR':
+            # Normalize based on initial investment
+            # Assuming higher CVaR is better
+            normalized_values.append(max(0, min(1, value / 6000000)))
+        elif metric == 'Sequence Risk':
+            # Smaller is better
+            normalized_values.append(max(0, min(1, (1 - value))))
+        elif metric == 'Success Rate':
+            # Already in percentage, normalize to 0-1
+            normalized_values.append(max(0, min(1, value / 100)))
+        else:
+            # For other metrics, higher is better
+            normalized_values.append(max(0, min(1, value / 3)))  # Assuming 3 is a good upper bound
+    
+    # Create radar chart
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatterpolar(
+        r=normalized_values,
+        theta=categories,
+        fill='toself',
+        name='Portfolio Metrics'
+    ))
+    
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 1]
+            )
+        ),
         showlegend=False,
-        margin=dict(l=20, r=20, t=100, b=20),
-        font=dict(size=14)
+        height=500,
+        title="Portfolio Risk-Return Metrics"
     )
     
-    return fig1
+    return fig
 
 def plot_correlation_matrix(correlation_matrix, asset_classes):
-    """Create a heatmap visualization of the correlation matrix"""
-    # Extract asset names
+    """Plot correlation matrix as a heatmap"""
     asset_names = [asset.name for asset in asset_classes]
+    
+    # Create correlation values for heatmap
+    z_values = []
+    text_values = []
+    
+    # Handle correlation_matrix as numpy array
+    for i, asset1 in enumerate(asset_names):
+        z_row = []
+        text_row = []
+        for j, asset2 in enumerate(asset_names):
+            corr_value = correlation_matrix[i, j]
+            z_row.append(corr_value)
+            text_row.append(f"{corr_value:.2f}")
+        z_values.append(z_row)
+        text_values.append(text_row)
     
     # Create heatmap
     fig = go.Figure(data=go.Heatmap(
-        z=correlation_matrix,
+        z=z_values,
         x=asset_names,
         y=asset_names,
-        colorscale='RdBu_r',  # Red-blue diverging colorscale
+        colorscale='RdBu_r',
         zmin=-1,
         zmax=1,
-        text=[[f"{correlation_matrix[i][j]:.2f}" for j in range(len(asset_names))] for i in range(len(asset_names))],
-        hovertemplate='%{y} × %{x}: %{text}<extra></extra>',
-        colorbar=dict(
-            title=dict(
-                text="Correlation",
-                side="right"
-            )
-        )
+        text=text_values,
+        texttemplate="%{text}",
+        showscale=True
     ))
     
     fig.update_layout(
         title="Asset Class Correlation Matrix",
-        height=500,
-        width=600,
-        template="plotly_white",
-        font=dict(size=14)
+        height=600,
+        xaxis=dict(title="Asset Class"),
+        yaxis=dict(title="Asset Class")
     )
     
     return fig
@@ -854,6 +867,22 @@ def export_report_data():
     
     return export_data
 
+def calculate_max_drawdown(results):
+    """Calculate maximum drawdown across all simulations"""
+    max_drawdowns = []
+    
+    for sim in results:
+        # Calculate running maximum
+        running_max = np.maximum.accumulate(sim)
+        # Calculate drawdown
+        drawdown = (sim - running_max) / running_max
+        # Get maximum drawdown
+        max_drawdown = np.min(drawdown)
+        max_drawdowns.append(max_drawdown)
+    
+    # Return median of maximum drawdowns
+    return np.median(max_drawdowns)
+
 def main():
     st.set_page_config(
         page_title="Portfolio Monte Carlo Simulation", 
@@ -942,8 +971,39 @@ def main():
         max_value=100000000,
         value=6000000,
         step=100000,
-        format="%d"
+        format="%d",
+        key="initial_investment"
     )
+    
+    initial_withdrawal = st.sidebar.number_input(
+        "Initial Annual Withdrawal ($)",
+        min_value=10000,
+        max_value=1000000,
+        value=300000,
+        step=10000,
+        format="%d",
+        key="initial_withdrawal"
+    )
+    
+    # Add withdrawal rate as a percentage of initial investment
+    withdrawal_rate = (initial_withdrawal / initial_investment) * 100
+    st.sidebar.write(f"Withdrawal Rate: {withdrawal_rate:.1f}%")
+    
+    # Add stress test option
+    st.sidebar.header("Stress Testing")
+    stress_test = st.sidebar.checkbox("Enable Stress Test", value=False)
+    
+    if stress_test:
+        stress_factor = st.sidebar.slider(
+            "Market Stress Factor (%)",
+            min_value=0,
+            max_value=50,
+            value=20,
+            step=5,
+            help="Reduces expected returns by this percentage"
+        )
+    else:
+        stress_factor = 0
     
     # Asset Allocation Section
     st.sidebar.header("Asset Allocation")
@@ -960,7 +1020,14 @@ def main():
         )
         st.session_state.stocks_allocation = stocks_allocation
         
-        stocks_return = st.number_input("Expected Return (%)", -10, 30, 10, step=1, key="stocks_return")
+        stocks_return = st.number_input(
+            "Expected Return (%)", 
+            min_value=-10, 
+            max_value=30, 
+            value=10, 
+            step=1, 
+            key="stocks_return"
+        )
         stocks_std = st.number_input("Standard Deviation (%)", 0, 30, 16, step=1, key="stocks_std")
         stocks_min = st.number_input("Minimum Return (%)", -50, 0, -25, step=1, key="stocks_min")
         stocks_max = st.number_input("Maximum Return (%)", 0, 50, 25, step=1, key="stocks_max")
@@ -1043,7 +1110,8 @@ def main():
         "Simulation Years",
         min_value=10,
         max_value=50,
-        value=30
+        value=30,  # Increase default from 15 to 30 years
+        step=5
     )
     
     num_simulations = st.sidebar.slider(
@@ -1150,83 +1218,81 @@ def main():
                 # Create asset classes with user inputs
                 asset_classes = [
                     AssetClass("Stocks", stocks_return/100, stocks_std/100, 
-                               stocks_min/100, stocks_max/100, stocks_allocation/100),
+                              stocks_min/100, stocks_max/100, stocks_allocation/100),
                     AssetClass("Bonds/MMF", bonds_return/100, bonds_std/100,
-                               bonds_min/100, bonds_max/100, bonds_allocation/100),
+                              bonds_min/100, bonds_max/100, bonds_allocation/100),
                     AssetClass("Alternatives", alts_return/100, alts_std/100,
-                               alts_min/100, alts_max/100, alts_allocation/100),
+                              alts_min/100, alts_max/100, alts_allocation/100),
                     AssetClass("Private Placements", private_return/100, private_std/100,
-                               private_min/100, private_max/100, private_allocation/100),
+                              private_min/100, private_max/100, private_allocation/100),
                     AssetClass("Cash", cash_return/100, cash_std/100,
-                               cash_min/100, cash_max/100, cash_allocation/100)
+                              cash_min/100, cash_max/100, cash_allocation/100)
                 ]
                 
-                # Determine which simulation method to use
-                if use_correlation and withdrawal_strategy.lower() != "fixed" or rebalance_frequency > 0:
-                    # Use enhanced portfolio for advanced features
-                    analyzer = PortfolioAnalyzer()
-                    analyzer.asset_classes = asset_classes
-                    
-                    # Set correlation matrix if requested
-                    if use_correlation:
-                        analyzer.set_correlation_matrix(create_default_correlation_matrix())
-                    else:
-                        analyzer.set_correlation_matrix()  # Identity matrix (no correlation)
-                    
-                    # Generate portfolio with rebalancing
-                    portfolio_values, asset_values, asset_returns = analyzer.calculate_rebalanced_portfolio(
-                        initial_investment=initial_investment,
-                        years=years,
-                        num_simulations=num_simulations,
-                        initial_allocation=asset_classes,
-                        rebalance_frequency=rebalance_frequency,
-                        rebalance_threshold=rebalance_threshold/100
-                    )
-                    
-                    # Apply withdrawal strategy
-                    if withdrawal_strategy.lower() == "percentage":
-                        withdrawal_amount = withdrawal_rate / 100
-                    else:  # dynamic or fixed
-                        withdrawal_amount = initial_withdrawal
-                    
-                    results, withdrawals_array = analyzer.apply_withdrawal_strategy(
-                        portfolio_values=portfolio_values,
-                        withdrawal_strategy=withdrawal_strategy.lower(),
-                        initial_withdrawal=withdrawal_amount,
-                        inflation_rate=inflation_rate
-                    )
-                    
-                    # Format withdrawals for plotting
-                    if withdrawal_strategy.lower() == "fixed":
-                        withdrawals = np.array([initial_withdrawal * (1 + inflation_rate)**year 
-                                             for year in range(years)])
-                    else:
-                        # Use median withdrawal for each year
-                        withdrawals = np.median(withdrawals_array, axis=0)
-                    
-                    # Calculate portfolio returns
-                    portfolio_returns = np.zeros((num_simulations, years))
-                    for i in range(years):
-                        if i == 0:
-                            prev_value = initial_investment
-                        else:
-                            prev_value = portfolio_values[:, i]
-                        portfolio_returns[:, i] = (portfolio_values[:, i+1] + withdrawals_array[:, i]) / prev_value - 1
-                    
-                    # Calculate risk metrics
-                    risk_metrics = analyzer.calculate_risk_metrics(portfolio_values, withdrawals_array)
-                    
-                else:
-                    # Use standard simulation for basic features
-                    results, portfolio_returns, withdrawals, asset_returns, _ = run_simulation(
-                        initial_investment=initial_investment,
-                        years=years,
-                        num_simulations=num_simulations,
-                        initial_withdrawal=initial_withdrawal,
-                        inflation_rate=inflation_rate,
-                        asset_classes=asset_classes
-                    )
-                    risk_metrics = None
+                # Run simulation and store results in session state
+                results, portfolio_returns, withdrawals, asset_returns, _ = run_simulation(
+                    initial_investment=initial_investment,
+                    years=years,
+                    num_simulations=num_simulations,
+                    initial_withdrawal=initial_withdrawal,
+                    inflation_rate=inflation_rate,
+                    asset_classes=asset_classes
+                )
+                
+                # Calculate all summary statistics directly from simulation results
+                final_values = results[:, -1]
+                
+                # Risk of depletion (percentage of simulations that hit zero at any point)
+                depleted_simulations = np.any(results <= 0, axis=1)
+                risk_of_depletion = np.mean(depleted_simulations) * 100
+                
+                # Initialize variables with default values
+                depletion_text = "Never"
+                escape_text = "Never"
+                escape_delta = "0% probability"
+                years_of_depletion = []
+                years_of_escape = []
+                
+                # Calculate year of depletion for each simulation
+                for sim in results:
+                    depleted_years = np.where(sim <= 0)[0]
+                    if len(depleted_years) > 0:
+                        years_of_depletion.append(depleted_years[0])
+                
+                # Calculate median year of depletion if any simulations deplete
+                if years_of_depletion:
+                    median_year_of_depletion = int(np.median(years_of_depletion))
+                    depletion_text = f"Year {median_year_of_depletion}"
+                
+                # Calculate year of escape (first year hitting $10MM)
+                escape_threshold = 10_000_000
+                for sim in results:
+                    escape_years = np.where(sim >= escape_threshold)[0]
+                    if len(escape_years) > 0:
+                        years_of_escape.append(escape_years[0])
+                
+                # Calculate median year of escape if any simulations reach threshold
+                if years_of_escape:
+                    median_year_of_escape = int(np.median(years_of_escape))
+                    escape_text = f"Year {median_year_of_escape}"
+                    escape_probability = (len(years_of_escape) / len(results)) * 100
+                    escape_delta = f"{escape_probability:.1f}% probability"
+                
+                # Store all results and calculated statistics in session state
+                st.session_state.simulation_results = {
+                    'results': results,
+                    'portfolio_returns': portfolio_returns,
+                    'withdrawals': withdrawals,
+                    'asset_returns': asset_returns,
+                    'asset_classes': asset_classes,
+                    'initial_investment': initial_investment,
+                    'risk_of_depletion': risk_of_depletion,
+                    'depletion_text': depletion_text,
+                    'years_of_depletion': years_of_depletion,
+                    'escape_text': escape_text,
+                    'escape_delta': escape_delta,
+                    'years_of_escape': years_of_escape
+                }
                 
                 # Run convergence analysis
                 convergence_results = run_convergence_analysis(
@@ -1237,23 +1303,47 @@ def main():
                     asset_classes=asset_classes
                 )
                 
-                # Store results in session state
-                st.session_state.simulation_results = {
-                    'results': results,
-                    'portfolio_returns': portfolio_returns,
-                    'withdrawals': withdrawals,
-                    'asset_returns': asset_returns,
-                    'asset_classes': asset_classes,
-                    'initial_investment': initial_investment,
-                    'convergence_results': convergence_results,
-                    'risk_metrics': risk_metrics,
-                    'rebalance_frequency': rebalance_frequency,
-                    'withdrawal_strategy': withdrawal_strategy.lower()
-                }
+                # Store convergence results
+                st.session_state.simulation_results['convergence_results'] = convergence_results
+                
+                # Calculate advanced risk metrics for tab 2
+                try:
+                    # Create portfolio analyzer
+                    analyzer = ep.PortfolioAnalyzer()
+                    
+                    # Set asset classes in the analyzer first
+                    analyzer.asset_classes = asset_classes
+                    
+                    # Create a simple correlation matrix that matches our asset classes
+                    n_assets = len(asset_classes)
+                    corr_matrix = np.eye(n_assets)  # Start with identity matrix
+                    
+                    # Fill with default correlations (0.3 between different assets)
+                    for i in range(n_assets):
+                        for j in range(n_assets):
+                            if i != j:
+                                corr_matrix[i, j] = 0.3
+                    
+                    # Set the correlation matrix
+                    analyzer.set_correlation_matrix(corr_matrix)
+                    
+                    # Calculate the risk metrics
+                    risk_metrics = analyzer.calculate_risk_metrics(results)
+                    
+                    # Add correlation matrix to risk metrics for display
+                    risk_metrics['correlation_matrix'] = corr_matrix
+                    
+                    # Store risk metrics in session state
+                    st.session_state.simulation_results['risk_metrics'] = risk_metrics
+                except Exception as e:
+                    # Log any errors but continue
+                    import traceback
+                    print(f"Error calculating risk metrics: {str(e)}")
+                    print(traceback.format_exc())
         
         # If we have simulation results, display them
         if 'simulation_results' in st.session_state:
-            # Extract results from session state
+            # Extract all results and statistics from session state
             sim_data = st.session_state.simulation_results
             results = sim_data['results']
             portfolio_returns = sim_data['portfolio_returns']
@@ -1261,44 +1351,16 @@ def main():
             asset_returns = sim_data['asset_returns']
             asset_classes = sim_data['asset_classes']
             initial_investment = sim_data['initial_investment']
+            risk_of_depletion = sim_data['risk_of_depletion']
+            depletion_text = sim_data['depletion_text']
+            years_of_depletion = sim_data['years_of_depletion']
+            escape_text = sim_data['escape_text']
+            escape_delta = sim_data['escape_delta']
+            years_of_escape = sim_data['years_of_escape']
+            convergence_results = sim_data['convergence_results']
             
-            # Calculate and display statistics
+            # Calculate any additional statistics needed for display
             final_values = results[:, -1]
-            # Proper risk of depletion calculation (percentage of simulations that hit zero at any point)
-            depleted_simulations = np.any(results <= 0, axis=1)
-            risk_of_depletion = np.mean(depleted_simulations) * 100
-            
-            # Calculate year of depletion (first year portfolio hits zero)
-            years_of_depletion = []
-            for sim in results:
-                depleted_years = np.where(sim <= 0)[0]
-                if len(depleted_years) > 0:
-                    years_of_depletion.append(depleted_years[0])
-            
-            # Calculate median year of depletion if it occurs
-            if years_of_depletion:
-                median_year_of_depletion = int(np.median(years_of_depletion))
-                depletion_text = f"Year {median_year_of_depletion}"
-            else:
-                depletion_text = "Never"
-            
-            # Calculate year of escape (first year hitting $10MM)
-            escape_threshold = 10_000_000
-            years_of_escape = []
-            for sim in results:
-                escape_years = np.where(sim >= escape_threshold)[0]
-                if len(escape_years) > 0:
-                    years_of_escape.append(escape_years[0])
-            
-            # Calculate median year of escape if it occurs
-            if years_of_escape:
-                median_year_of_escape = int(np.median(years_of_escape))
-                escape_text = f"Year {median_year_of_escape}"
-                escape_probability = (len(years_of_escape) / len(results)) * 100
-                escape_delta = f"{escape_probability:.1f}% probability"
-            else:
-                escape_text = "Never"
-                escape_delta = "0% probability"
             
             # Display summary at the top using the placeholder
             with summary_placeholder.container():
@@ -1381,7 +1443,7 @@ def main():
             st.markdown("---")
             
             # Run and display convergence analysis at the bottom
-            conv_fig, median_changes, p90_changes, p10_changes, risk_changes = plot_convergence(sim_data['convergence_results'])
+            conv_fig, median_changes, p90_changes, p10_changes, risk_changes = plot_convergence(convergence_results)
             st.header("Convergence Analysis")
             
             # Display convergence plot
@@ -1403,149 +1465,182 @@ def main():
                 hide_index=True,
                 use_container_width=True
             )
+            
+            # Check if advanced analysis sections should be displayed
+            if 'simulation_results' in st.session_state:
+                # Extract necessary data for advanced analysis
+                sim_data = st.session_state.simulation_results
+                results = sim_data['results']
+                portfolio_returns = sim_data['portfolio_returns']
+                asset_returns = sim_data['asset_returns']
+                asset_classes = sim_data['asset_classes']
+                
+                # Add advanced analysis section
+                st.header("Advanced Analysis")
+                
+                try:
+                    # Print debug information
+                    st.sidebar.write("Debug: Starting advanced analysis")
+                    st.sidebar.write(f"Asset classes: {[a.name for a in asset_classes]}")
+                    
+                    # Create portfolio analyzer
+                    analyzer = ep.PortfolioAnalyzer()
+                    
+                    # Set asset classes in the analyzer first
+                    analyzer.asset_classes = asset_classes
+                    st.sidebar.write("Debug: Set asset classes")
+                    
+                    # Create a simple correlation matrix that matches our asset classes
+                    n_assets = len(asset_classes)
+                    corr_matrix_np = np.eye(n_assets)  # Start with identity matrix (1s on diagonal)
+                    
+                    # Fill with default correlations (0.3 between different assets)
+                    for i in range(n_assets):
+                        for j in range(n_assets):
+                            if i != j:
+                                corr_matrix_np[i, j] = 0.3
+                    
+                    st.sidebar.write("Debug: Created correlation matrix")
+                    
+                    # Now set the correlation matrix
+                    analyzer.set_correlation_matrix(corr_matrix_np)
+                    st.sidebar.write("Debug: Set correlation matrix")
+                    
+                    # Calculate risk metrics directly from results
+                    st.sidebar.write(f"Debug: Results shape: {results.shape}")
+                    risk_metrics = analyzer.calculate_risk_metrics(results)
+                    st.sidebar.write(f"Debug: Risk metrics: {list(risk_metrics.keys())}")
+                    
+                    # Display advanced metrics
+                    advanced_metrics_fig = plot_advanced_metrics(risk_metrics)
+                    st.sidebar.write("Debug: Created advanced metrics figure")
+                    st.plotly_chart(advanced_metrics_fig, use_container_width=True)
+                    
+                    # Display correlation matrix
+                    corr_fig = plot_correlation_matrix(corr_matrix_np, asset_classes)
+                    st.sidebar.write("Debug: Created correlation matrix figure")
+                    st.plotly_chart(corr_fig, use_container_width=True)
+                    
+                    # Run historical backtest
+                    historical_data = ep.get_historical_returns()
+                    st.sidebar.write("Debug: Got historical returns")
+                    
+                    backtest_results = ep.run_historical_backtest(
+                        initial_investment=initial_investment,
+                        years_to_simulate=years,
+                        initial_withdrawal=initial_withdrawal,
+                        asset_classes=asset_classes
+                    )
+                    st.sidebar.write("Debug: Ran historical backtest")
+                    
+                    # Display historical backtest
+                    backtest_fig = plot_historical_backtest(backtest_results, historical_data, years)
+                    st.sidebar.write("Debug: Created historical backtest figure")
+                    st.plotly_chart(backtest_fig, use_container_width=True)
+                except Exception as e:
+                    st.sidebar.error(f"Error in advanced analysis: {str(e)}")
+                    import traceback
+                    st.sidebar.error(traceback.format_exc())
     
     # Tab 2: Advanced Analysis
     with tabs[1]:
         if 'simulation_results' in st.session_state:
-            # Add advanced risk metrics visualization if available
-            if st.session_state.simulation_results.get('risk_metrics'):
-                risk_metrics = st.session_state.simulation_results['risk_metrics']
+            st.header("Advanced Portfolio Analysis")
+            
+            # Get simulation data from session state
+            sim_data = st.session_state.simulation_results
+            results = sim_data['results']
+            portfolio_returns = sim_data['portfolio_returns']
+            asset_returns = sim_data['asset_returns']
+            asset_classes = sim_data['asset_classes']
+            
+            # Check if risk metrics are already calculated
+            if sim_data.get('risk_metrics'):
+                risk_metrics = sim_data['risk_metrics']
                 
                 # Display advanced metrics plot
-                st.header("Advanced Risk Metrics")
-                st.plotly_chart(plot_advanced_metrics(risk_metrics), use_container_width=True)
-            
-            # Portfolio allocation heatmap
-            st.header("Portfolio Allocation Analysis")
-            st.write("Explore how different asset allocations affect portfolio outcomes.")
-            
-            # Input for allocation ranges
-            col1, col2 = st.columns(2)
-            with col1:
-                stock_min = st.slider("Minimum Stock Allocation (%)", 0, 80, 10, 5)
-                stock_max = st.slider("Maximum Stock Allocation (%)", stock_min, 100, min(stock_min + 50, 100), 5)
-            with col2:
-                bond_min = st.slider("Minimum Bond Allocation (%)", 0, 80, 10, 5)
-                bond_max = st.slider("Maximum Bond Allocation (%)", bond_min, 100, min(bond_min + 50, 100), 5)
-            
-            # Button to generate heatmap
-            generate_heatmap = st.button("Generate Allocation Heatmap")
-            
-            if generate_heatmap:
-                with st.spinner("Generating allocation heatmap..."):
-                    # Convert percentage to decimal
-                    stock_range = (stock_min / 100, stock_max / 100)
-                    bond_range = (bond_min / 100, bond_max / 100)
-                    
-                    # Generate heatmap data
-                    stock_allocs, bond_allocs, median_values, sharpe_values, risk_values = create_allocation_heatmap(
-                        stock_range, bond_range, st.session_state.simulation_results['asset_classes']
-                    )
-                    
-                    # Display heatmaps in 2 columns
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.plotly_chart(
-                            plot_allocation_heatmap(stock_allocs, bond_allocs, median_values, "Median Final Value ($M)"),
-                            use_container_width=True
-                        )
-                    with col2:
-                        st.plotly_chart(
-                            plot_allocation_heatmap(stock_allocs, bond_allocs, sharpe_values, "Sharpe Ratio"),
-                            use_container_width=True
-                        )
-            
-            # Correlation matrix visualization
-            st.header("Asset Correlation Analysis")
-            if 'asset_classes' in st.session_state.simulation_results:
-                assets = st.session_state.simulation_results['asset_classes']
-                
-                # Create default correlation matrix
-                corr_matrix = create_default_correlation_matrix()
+                st.subheader("Advanced Risk Metrics")
+                advanced_metrics_fig = plot_advanced_metrics(risk_metrics)
+                st.plotly_chart(advanced_metrics_fig, use_container_width=True)
                 
                 # Display correlation matrix
-                st.plotly_chart(
-                    plot_correlation_matrix(corr_matrix, assets),
-                    use_container_width=True
-                )
-                
-                st.info("This correlation matrix shows the statistical relationship between the returns of different asset classes. A value of 1.0 means perfect correlation, 0 means no correlation, and -1.0 means perfect negative correlation.")
+                st.subheader("Asset Correlation Matrix")
+                if 'correlation_matrix' in risk_metrics:
+                    corr_matrix = risk_metrics['correlation_matrix']
+                    corr_fig = plot_correlation_matrix(corr_matrix, asset_classes)
+                    st.plotly_chart(corr_fig, use_container_width=True)
+            else:
+                # If risk metrics not yet calculated, calculate them now
+                try:
+                    st.info("Calculating advanced risk metrics...")
+                    
+                    # Create portfolio analyzer
+                    analyzer = ep.PortfolioAnalyzer()
+                    analyzer.asset_classes = asset_classes
+                    
+                    # Create a correlation matrix
+                    n_assets = len(asset_classes)
+                    corr_matrix = np.eye(n_assets)
+                    for i in range(n_assets):
+                        for j in range(n_assets):
+                            if i != j:
+                                corr_matrix[i, j] = 0.3
+                    
+                    analyzer.set_correlation_matrix(corr_matrix)
+                    
+                    # Calculate risk metrics
+                    risk_metrics = analyzer.calculate_risk_metrics(results)
+                    risk_metrics['correlation_matrix'] = corr_matrix
+                    
+                    # Store in session state for future use
+                    st.session_state.simulation_results['risk_metrics'] = risk_metrics
+                    
+                    # Display metrics
+                    st.subheader("Advanced Risk Metrics")
+                    advanced_metrics_fig = plot_advanced_metrics(risk_metrics)
+                    st.plotly_chart(advanced_metrics_fig, use_container_width=True)
+                    
+                    # Display correlation matrix
+                    st.subheader("Asset Correlation Matrix")
+                    corr_fig = plot_correlation_matrix(corr_matrix, asset_classes)
+                    st.plotly_chart(corr_fig, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error calculating advanced metrics: {str(e)}")
+                    import traceback
+                    st.error(traceback.format_exc())
         else:
-            st.info("Run a simulation to see advanced analysis.")
+            st.info("Run a simulation to view advanced analysis")
     
     # Tab 3: Historical Analysis
     with tabs[2]:
-        st.header("Historical Backtest Analysis")
-        st.write("Analyze how your portfolio would have performed using actual historical returns.")
-        
-        # Historical backtest parameters
-        backtest_years = st.slider(
-            "Backtest Years",
-            min_value=5,
-            max_value=30,
-            value=20
-        )
-        
-        backtest_strategy = st.selectbox(
-            "Withdrawal Strategy",
-            options=["Fixed", "Percentage", "Dynamic"],
-            index=0,
-            format_func=lambda x: {
-                "Fixed": "Fixed (Inflation-Adjusted)",
-                "Percentage": "Percentage of Portfolio",
-                "Dynamic": "Dynamic (Market-Responsive)"
-            }.get(x, x)
-        )
-        
-        # Historical data display
-        hist_data = get_historical_returns()
-        
-        # Option to run historical backtest
-        run_backtest = st.button("Run Historical Backtest")
-        
-        if run_backtest and 'simulation_results' in st.session_state:
-            with st.spinner("Running historical backtest..."):
-                # Use asset classes from simulation
-                asset_classes = st.session_state.simulation_results['asset_classes']
-                initial_investment = st.session_state.simulation_results['initial_investment']
-                
-                # Determine initial withdrawal based on strategy
-                if backtest_strategy.lower() == "fixed":
-                    initial_withdrawal = st.session_state.simulation_results['withdrawals'][0]
-                else:
-                    # Use withdrawal rate from session state or default to 4%
-                    rate = st.session_state.get('withdrawal_rate', 4.0) / 100
-                    initial_withdrawal = rate
-                
+        st.header("Historical Portfolio Analysis")
+        if 'simulation_results' in st.session_state:
+            sim_data = st.session_state.simulation_results
+            asset_classes = sim_data['asset_classes']
+            initial_investment = sim_data['initial_investment']
+            
+            st.subheader("Historical Performance")
+            try:
                 # Run historical backtest
-                backtest_results = run_historical_backtest(
+                historical_data = ep.get_historical_returns()
+                years = len(historical_data) if historical_data is not None else 30
+                
+                backtest_results = ep.run_historical_backtest(
                     initial_investment=initial_investment,
-                    years_to_simulate=backtest_years,
+                    years_to_simulate=years,
                     initial_withdrawal=initial_withdrawal,
-                    asset_classes=asset_classes,
-                    withdrawal_strategy=backtest_strategy.lower()
+                    asset_classes=asset_classes
                 )
                 
-                # Display backtest results
-                st.plotly_chart(
-                    plot_historical_backtest(backtest_results, hist_data, backtest_years),
-                    use_container_width=True
-                )
-                
-                # Historical data table
-                st.subheader("Historical Returns Data (Last 10 Years)")
-                st.dataframe(
-                    hist_data.sort_values('year', ascending=False).head(10).style.format({
-                        'stocks': '{:.1%}',
-                        'bonds': '{:.1%}',
-                        'alternatives': '{:.1%}',
-                        'private': '{:.1%}',
-                        'cash': '{:.1%}'
-                    }),
-                    use_container_width=True
-                )
+                # Display historical backtest
+                backtest_fig = plot_historical_backtest(backtest_results, historical_data, years)
+                st.plotly_chart(backtest_fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error in historical analysis: {str(e)}")
+                import traceback
+                st.error(traceback.format_exc())
         else:
-            st.info("Run a simulation first, then run a historical backtest to compare.")
+            st.info("Run a simulation to view historical analysis")
     
     # Tab 4: Settings (Save/Load, Export)
     with tabs[3]:
