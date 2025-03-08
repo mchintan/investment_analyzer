@@ -25,7 +25,7 @@ A comprehensive Monte Carlo simulation tool for investment portfolio analysis. T
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/investment_analyzer.git
+git clone https://github.com/mchintan/investment_analyzer.git
 cd investment_analyzer
 pip install -r requirements.txt
 ```
