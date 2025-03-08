@@ -985,10 +985,6 @@ def main():
         key="initial_withdrawal"
     )
     
-    # Add withdrawal rate as a percentage of initial investment
-    withdrawal_rate = (initial_withdrawal / initial_investment) * 100
-    st.sidebar.write(f"Withdrawal Rate: {withdrawal_rate:.1f}%")
-    
     # Add stress test option
     st.sidebar.header("Stress Testing")
     stress_test = st.sidebar.checkbox("Enable Stress Test", value=False)
