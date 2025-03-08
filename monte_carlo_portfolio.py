@@ -88,7 +88,9 @@ def plot_simulations(results, portfolio_returns, withdrawals, asset_returns, ass
     percentile_90 = np.percentile(results, 90, axis=0)
     
     final_values = results[:, -1]
-    risk_of_depletion = np.mean(final_values < withdrawals[-1]) * 100
+    # Proper risk of depletion: percentage of simulations that hit zero at any point
+    depleted_simulations = np.any(results <= 0, axis=1)
+    risk_of_depletion = np.mean(depleted_simulations) * 100
     
     ax1.plot(years, median, color='#FF1E1E', linewidth=3.5, label='Median')
     ax1.plot(years, percentile_10, color='#4CAF50', linewidth=3.5, label='10th Percentile')
@@ -209,12 +211,36 @@ def run_convergence_analysis(initial_investment, years, initial_withdrawal, infl
         )
         
         final_values = results[:, -1]
+        # Check for simulations that hit zero at any point (true risk of depletion)
+        depleted_simulations = np.any(results <= 0, axis=1)
+        
+        # Calculate all metrics with protection against edge cases
+        try:
+            median_value = np.median(final_values)
+        except:
+            median_value = 0
+            
+        try:
+            p10 = np.percentile(final_values, 10)
+        except:
+            p10 = 0
+            
+        try:
+            p90 = np.percentile(final_values, 90)
+        except:
+            p90 = 0
+            
+        try:
+            depletion_risk = np.mean(depleted_simulations) * 100
+        except:
+            depletion_risk = 0
+        
         convergence_results.append({
             'n_sims': n_sims,
-            'median': np.median(final_values),
-            'percentile_10': np.percentile(final_values, 10),
-            'percentile_90': np.percentile(final_values, 90),
-            'risk_of_depletion': np.mean(final_values < withdrawals[-1]) * 100
+            'median': median_value,
+            'percentile_10': p10,
+            'percentile_90': p90,
+            'risk_of_depletion': depletion_risk
         })
     
     return convergence_results

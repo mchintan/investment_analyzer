@@ -243,17 +243,40 @@ def plot_convergence(convergence_results):
     p10 = [r['percentile_10'] for r in convergence_results]
     risk = [r['risk_of_depletion'] for r in convergence_results]
     
-    # Calculate relative changes
+    # Calculate relative changes with protection against division by zero
     def calc_relative_change(values):
         changes = []
         for i in range(1, len(values)):
-            changes.append(abs((values[i] - values[i-1]) / values[i-1]) * 100)
+            # Skip if previous value is zero to avoid division by zero
+            if values[i-1] == 0:
+                if values[i] == 0:
+                    changes.append(0)  # No change if both values are zero
+                else:
+                    changes.append(100)  # 100% change if going from 0 to non-zero
+            else:
+                changes.append(abs((values[i] - values[i-1]) / values[i-1]) * 100)
         return changes
     
-    median_changes = calc_relative_change(medians)
-    p90_changes = calc_relative_change(p90)
-    p10_changes = calc_relative_change(p10)
-    risk_changes = calc_relative_change(risk)
+    # Calculate changes with protection against invalid inputs
+    try:
+        median_changes = calc_relative_change(medians)
+    except:
+        median_changes = [0] * (len(n_sims) - 1)
+        
+    try:
+        p90_changes = calc_relative_change(p90)
+    except:
+        p90_changes = [0] * (len(n_sims) - 1)
+        
+    try:
+        p10_changes = calc_relative_change(p10)
+    except:
+        p10_changes = [0] * (len(n_sims) - 1)
+        
+    try:
+        risk_changes = calc_relative_change(risk)
+    except:
+        risk_changes = [0] * (len(n_sims) - 1)
     
     # Add traces for portfolio values
     fig.add_trace(
@@ -1241,7 +1264,9 @@ def main():
             
             # Calculate and display statistics
             final_values = results[:, -1]
-            risk_of_depletion = np.mean(final_values < withdrawals[-1]) * 100
+            # Proper risk of depletion calculation (percentage of simulations that hit zero at any point)
+            depleted_simulations = np.any(results <= 0, axis=1)
+            risk_of_depletion = np.mean(depleted_simulations) * 100
             
             # Calculate year of depletion (first year portfolio hits zero)
             years_of_depletion = []
