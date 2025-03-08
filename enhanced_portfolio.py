@@ -220,9 +220,15 @@ class PortfolioAnalyzer:
         for year in range(1, years):
             # If withdrawals provided, include them in return calculation
             if withdrawals is not None:
-                returns[:, year-1] = (portfolio_values[:, year] + withdrawals[:, year-1]) / portfolio_values[:, year-1] - 1
+                # Ensure no division by zero
+                prev_values = portfolio_values[:, year-1].copy()
+                prev_values[prev_values == 0] = 1e-10  # Small value to avoid division by zero
+                returns[:, year-1] = (portfolio_values[:, year] + withdrawals[:, year-1]) / prev_values - 1
             else:
-                returns[:, year-1] = portfolio_values[:, year] / portfolio_values[:, year-1] - 1
+                # Ensure no division by zero
+                prev_values = portfolio_values[:, year-1].copy()
+                prev_values[prev_values == 0] = 1e-10  # Small value to avoid division by zero
+                returns[:, year-1] = portfolio_values[:, year] / prev_values - 1
         
         # Calculate metrics
         metrics = {}
@@ -231,9 +237,13 @@ class PortfolioAnalyzer:
         mean_return = np.mean(returns, axis=1)
         std_dev = np.std(returns, axis=1)
         
+        # Ensure no division by zero for Sharpe ratio
+        std_dev_safe = std_dev.copy()
+        std_dev_safe[std_dev_safe == 0] = 1e-10  # Small value to avoid division by zero
+        
         # Calculate Sharpe Ratio (assuming risk-free rate of 2%)
         risk_free_rate = 0.02
-        sharpe_ratio = (mean_return - risk_free_rate) / std_dev
+        sharpe_ratio = (mean_return - risk_free_rate) / std_dev_safe
         metrics['sharpe_ratio'] = {
             'mean': np.mean(sharpe_ratio),
             'median': np.median(sharpe_ratio),
@@ -244,15 +254,17 @@ class PortfolioAnalyzer:
         # Calculate maximum drawdown
         max_drawdown = np.zeros(num_simulations)
         for sim in range(num_simulations):
-            peak = portfolio_values[sim, 0]
+            peak = max(portfolio_values[sim, 0], 1e-10)  # Ensure non-zero peak
             drawdown = 0
             for year in range(1, years):
                 if portfolio_values[sim, year] > peak:
                     peak = portfolio_values[sim, year]
                 else:
-                    current_drawdown = (peak - portfolio_values[sim, year]) / peak
-                    if current_drawdown > drawdown:
-                        drawdown = current_drawdown
+                    # Ensure non-zero peak for division
+                    if peak > 0:
+                        current_drawdown = (peak - portfolio_values[sim, year]) / peak
+                        if current_drawdown > drawdown:
+                            drawdown = current_drawdown
             max_drawdown[sim] = drawdown
         
         metrics['max_drawdown'] = {

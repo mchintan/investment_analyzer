@@ -636,7 +636,7 @@ def create_allocation_heatmap(stock_range, bond_range, asset_classes):
             metrics = analyzer.calculate_risk_metrics(portfolio_values)
             
             # Store results
-            median_values[i, j] = portfolio_values[:, -1].median() / 1000000  # In millions
+            median_values[i, j] = np.median(portfolio_values[:, -1]) / 1000000  # In millions
             sharpe_values[i, j] = metrics['sharpe_ratio']['median']
             risk_values[i, j] = 100 - (np.mean(portfolio_values[:, -1] > 0) * 100)  # Risk of depletion
     
