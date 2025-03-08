@@ -1437,7 +1437,7 @@ def main():
                 asset_classes,
                 initial_investment
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key="tab1_main_plot")
             
             # Add space between main simulation and convergence analysis
             st.markdown("---")
@@ -1447,7 +1447,7 @@ def main():
             st.header("Convergence Analysis")
             
             # Display convergence plot
-            st.plotly_chart(conv_fig, use_container_width=True)
+            st.plotly_chart(conv_fig, use_container_width=True, key="tab1_convergence_plot")
             
             # Display changes table
             st.markdown("### Simulation Convergence")
@@ -1514,12 +1514,12 @@ def main():
                     # Display advanced metrics
                     advanced_metrics_fig = plot_advanced_metrics(risk_metrics)
                     st.sidebar.write("Debug: Created advanced metrics figure")
-                    st.plotly_chart(advanced_metrics_fig, use_container_width=True)
+                    st.plotly_chart(advanced_metrics_fig, use_container_width=True, key="tab1_adv_metrics_debug")
                     
                     # Display correlation matrix
                     corr_fig = plot_correlation_matrix(corr_matrix_np, asset_classes)
                     st.sidebar.write("Debug: Created correlation matrix figure")
-                    st.plotly_chart(corr_fig, use_container_width=True)
+                    st.plotly_chart(corr_fig, use_container_width=True, key="tab1_corr_matrix_debug")
                     
                     # Run historical backtest
                     historical_data = ep.get_historical_returns()
@@ -1536,7 +1536,7 @@ def main():
                     # Display historical backtest
                     backtest_fig = plot_historical_backtest(backtest_results, historical_data, years)
                     st.sidebar.write("Debug: Created historical backtest figure")
-                    st.plotly_chart(backtest_fig, use_container_width=True)
+                    st.plotly_chart(backtest_fig, use_container_width=True, key="tab1_historical_debug")
                 except Exception as e:
                     st.sidebar.error(f"Error in advanced analysis: {str(e)}")
                     import traceback
@@ -1561,14 +1561,14 @@ def main():
                 # Display advanced metrics plot
                 st.subheader("Advanced Risk Metrics")
                 advanced_metrics_fig = plot_advanced_metrics(risk_metrics)
-                st.plotly_chart(advanced_metrics_fig, use_container_width=True)
+                st.plotly_chart(advanced_metrics_fig, use_container_width=True, key="tab2_adv_metrics")
                 
                 # Display correlation matrix
                 st.subheader("Asset Correlation Matrix")
                 if 'correlation_matrix' in risk_metrics:
                     corr_matrix = risk_metrics['correlation_matrix']
                     corr_fig = plot_correlation_matrix(corr_matrix, asset_classes)
-                    st.plotly_chart(corr_fig, use_container_width=True)
+                    st.plotly_chart(corr_fig, use_container_width=True, key="tab2_corr_matrix")
             else:
                 # If risk metrics not yet calculated, calculate them now
                 try:
@@ -1598,12 +1598,12 @@ def main():
                     # Display metrics
                     st.subheader("Advanced Risk Metrics")
                     advanced_metrics_fig = plot_advanced_metrics(risk_metrics)
-                    st.plotly_chart(advanced_metrics_fig, use_container_width=True)
+                    st.plotly_chart(advanced_metrics_fig, use_container_width=True, key="tab2_adv_metrics_calc")
                     
                     # Display correlation matrix
                     st.subheader("Asset Correlation Matrix")
                     corr_fig = plot_correlation_matrix(corr_matrix, asset_classes)
-                    st.plotly_chart(corr_fig, use_container_width=True)
+                    st.plotly_chart(corr_fig, use_container_width=True, key="tab2_corr_matrix_calc")
                 except Exception as e:
                     st.error(f"Error calculating advanced metrics: {str(e)}")
                     import traceback
@@ -1634,7 +1634,7 @@ def main():
                 
                 # Display historical backtest
                 backtest_fig = plot_historical_backtest(backtest_results, historical_data, years)
-                st.plotly_chart(backtest_fig, use_container_width=True)
+                st.plotly_chart(backtest_fig, use_container_width=True, key="tab3_historical_backtest")
             except Exception as e:
                 st.error(f"Error in historical analysis: {str(e)}")
                 import traceback
