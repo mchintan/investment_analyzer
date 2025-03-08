@@ -20,7 +20,7 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
             'Portfolio Value Over Time',
             'Asset Class Returns Distribution',
             'Portfolio Return Distribution',
-            'Annual Withdrawals Over Time'
+            'Inflation-Adjusted Withdrawals'
         ),
         vertical_spacing=0.12,
         row_heights=[0.4, 0.2, 0.2, 0.2]
@@ -83,7 +83,7 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
         go.Scatter(
             x=years[1:],
             y=withdrawals,
-            name='Annual Withdrawal',
+            name='Withdrawal Amount',
             line=dict(color='red', width=2),
             hovertemplate='Year: %{x}<br>Withdrawal: $%{y:,.0f}<extra></extra>'
         ),
@@ -220,7 +220,7 @@ def create_plotly_figures(results, portfolio_returns, withdrawals, asset_returns
         elif trace.name in ['Median', '10th Percentile', '90th Percentile']:
             trace.legendgroup = "portfolio_value"
             trace.legendgrouptitle = dict(text="Portfolio Value")
-        elif 'Annual Withdrawal' in trace.name:
+        elif 'Withdrawal' in trace.name:
             trace.legendgroup = "withdrawals"
             trace.legendgrouptitle = dict(text="Withdrawals")
         elif 'Portfolio Returns' in trace.name:
@@ -1479,16 +1479,11 @@ def main():
                 st.header("Advanced Analysis")
                 
                 try:
-                    # Print debug information
-                    st.sidebar.write("Debug: Starting advanced analysis")
-                    st.sidebar.write(f"Asset classes: {[a.name for a in asset_classes]}")
-                    
                     # Create portfolio analyzer
                     analyzer = ep.PortfolioAnalyzer()
                     
                     # Set asset classes in the analyzer first
                     analyzer.asset_classes = asset_classes
-                    st.sidebar.write("Debug: Set asset classes")
                     
                     # Create a simple correlation matrix that matches our asset classes
                     n_assets = len(asset_classes)
@@ -1500,47 +1495,18 @@ def main():
                             if i != j:
                                 corr_matrix_np[i, j] = 0.3
                     
-                    st.sidebar.write("Debug: Created correlation matrix")
-                    
                     # Now set the correlation matrix
                     analyzer.set_correlation_matrix(corr_matrix_np)
-                    st.sidebar.write("Debug: Set correlation matrix")
                     
                     # Calculate risk metrics directly from results
-                    st.sidebar.write(f"Debug: Results shape: {results.shape}")
                     risk_metrics = analyzer.calculate_risk_metrics(results)
-                    st.sidebar.write(f"Debug: Risk metrics: {list(risk_metrics.keys())}")
                     
-                    # Display advanced metrics
-                    advanced_metrics_fig = plot_advanced_metrics(risk_metrics)
-                    st.sidebar.write("Debug: Created advanced metrics figure")
-                    st.plotly_chart(advanced_metrics_fig, use_container_width=True, key="tab1_adv_metrics_debug")
-                    
-                    # Display correlation matrix
-                    corr_fig = plot_correlation_matrix(corr_matrix_np, asset_classes)
-                    st.sidebar.write("Debug: Created correlation matrix figure")
-                    st.plotly_chart(corr_fig, use_container_width=True, key="tab1_corr_matrix_debug")
-                    
-                    # Run historical backtest
-                    historical_data = ep.get_historical_returns()
-                    st.sidebar.write("Debug: Got historical returns")
-                    
-                    backtest_results = ep.run_historical_backtest(
-                        initial_investment=initial_investment,
-                        years_to_simulate=years,
-                        initial_withdrawal=initial_withdrawal,
-                        asset_classes=asset_classes
-                    )
-                    st.sidebar.write("Debug: Ran historical backtest")
-                    
-                    # Display historical backtest
-                    backtest_fig = plot_historical_backtest(backtest_results, historical_data, years)
-                    st.sidebar.write("Debug: Created historical backtest figure")
-                    st.plotly_chart(backtest_fig, use_container_width=True, key="tab1_historical_debug")
+                    # Store risk metrics in session state
+                    st.session_state.simulation_results['risk_metrics'] = risk_metrics
                 except Exception as e:
-                    st.sidebar.error(f"Error in advanced analysis: {str(e)}")
+                    st.error(f"Error in advanced analysis: {str(e)}")
                     import traceback
-                    st.sidebar.error(traceback.format_exc())
+                    st.error(traceback.format_exc())
     
     # Tab 2: Advanced Analysis
     with tabs[1]:
