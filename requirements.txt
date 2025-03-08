@@ -1,6 +1,6 @@
-streamlit
-numpy
-scipy
-matplotlib
-plotly
-pandas 
+streamlit>=1.30.0
+numpy>=1.24.0
+scipy>=1.11.0
+matplotlib>=3.7.0
+plotly>=5.18.0
+pandas>=2.1.0
